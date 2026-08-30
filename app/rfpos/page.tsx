@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic'; // <-- Evita el error de pre-renderizado estático en Vercel
+
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
@@ -29,8 +31,7 @@ export default function RfposPortalPage() {
 
       if (authError) throw authError;
 
-      // Redirigir al dashboard o sección interna del RFPOS al iniciar sesión con éxito
-      router.push('/rfpos/dashboard'); // O la ruta interna que corresponda a tu panel
+      router.push('/rfpos/dashboard');
     } catch (err: any) {
       setError(err.message || 'Correo o contraseña incorrectos.');
     } finally {
