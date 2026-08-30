@@ -5,7 +5,13 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  {
+    auth: {
+      detectSessionInUrl: true,
+      persistSession: true,
+    },
+  }
 );
 
 export default function UpdatePasswordPage() {
@@ -13,63 +19,63 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [isReady, setIsReady] = useState(false);
+  const [isSessionActive, setIsSessionActive] = useState(false);
 
   useEffect(() => {
-    const handleAuthTokens = async () => {
-      // Supabase envía parámetros y errores después del símbolo # (hash)
+    const initSession = async () => {
+      // 1. Revisar si hay errores explícitos en la URL (ej. enlace expirado)
       const hash = window.location.hash.substring(1);
       const hashParams = new URLSearchParams(hash);
-      
       const errorDescription = hashParams.get('error_description');
-      const errorCode = hashParams.get('error_code');
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-
-      // Si Supabase devuelve un error en la URL (ej. enlace expirado)
-      if (errorCode || errorDescription) {
-        const cleanError = decodeURIComponent(errorDescription || 'El enlace ha expirado o no es válido.').replace(/\+/g, ' ');
-        setError(cleanError);
+      
+      if (errorDescription) {
+        setError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
         return;
       }
 
-      // Si viene con tokens de sesión en el hash
-      if (accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (error) {
-          setError(error.message);
-        } else {
-          setIsReady(true);
-        }
-        return;
-      }
+      // 2. Dar un pequeño respiro para que Supabase procese los tokens de la URL automáticamente
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Compatibilidad con parámetros de consulta estándar (?code=...)
-      const searchParams = new URLSearchParams(window.location.search);
-      const code = searchParams.get('code');
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          setError(error.message);
-        } else {
-          setIsReady(true);
-        }
-        return;
-      }
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      // Verificar si ya existe una sesión activa
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setIsReady(true);
+      if (sessionError) {
+        setError(sessionError.message);
+      } else if (session) {
+        setIsSessionActive(true);
       } else {
-        setError('No se encontró un enlace válido. Por favor, solicita un nuevo correo de recuperación.');
+        // Intento manual por si el cliente automático no los tomó
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: setErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (setErr) {
+            setError(setErr.message);
+          } else {
+            setIsSessionActive(true);
+          }
+        } else {
+          setError('No se encontró una sesión válida o el enlace ha expirado. Por favor solicita un nuevo acceso.');
+        }
       }
     };
 
-    handleAuthTokens();
+    initSession();
+
+    // Escuchar cambios de estado de autenticación en tiempo real
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setIsSessionActive(true);
+        setError(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -77,10 +83,18 @@ export default function UpdatePasswordPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.updateUser({ password });
+    // Validación estricta de sesión antes de actualizar
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setError('Auth session missing! La sesión expiró o no está activa. Vuelve a abrir el enlace de tu correo.');
+      setLoading(false);
+      return;
+    }
 
-    if (error) {
-      setError(error.message);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+
+    if (updateError) {
+      setError(updateError.message);
       setLoading(false);
     } else {
       setSuccess(true);
@@ -127,7 +141,7 @@ export default function UpdatePasswordPage() {
 
             <button
               type="submit"
-              disabled={loading || !isReady}
+              disabled={loading || !isSessionActive}
               className="w-full rounded-lg bg-black py-2.5 text-white font-medium hover:bg-gray-800 transition disabled:opacity-50"
             >
               {loading ? 'Guardando...' : 'Guardar contraseña'}
