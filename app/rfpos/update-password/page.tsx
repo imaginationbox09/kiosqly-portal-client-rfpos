@@ -20,7 +20,7 @@ export default function UpdatePasswordPage() {
     if (error) {
       setMessage(`Error: ${error.message}`)
     } else {
-      setMessage('¡Contraseña actualizada con éxito! Redirigiendo...')
+      setMessage('¡Contraseña guardada con éxito! Redirigiendo...')
       setTimeout(() => {
         window.location.href = '/rfpos/login'
       }, 1500)
@@ -36,7 +36,7 @@ export default function UpdatePasswordPage() {
             K
           </div>
           <h1 className="text-xl font-bold">Kiosqly RFPOS</h1>
-          <p className="text-sm text-gray-500">Crear nueva contraseña</p>
+          <p className="text-sm text-gray-500">Establece tu nueva contraseña</p>
         </div>
 
         <form onSubmit={handleUpdatePassword} className="space-y-4">
