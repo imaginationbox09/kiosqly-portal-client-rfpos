@@ -1,1 +1,1 @@
-
+Kiosqly Portal Client
