@@ -1,28 +1,35 @@
 'use client'
 
 import { useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClient } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+)
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('')
-
+  const [errorMsg, setErrorMsg] = useState('')
   const router = useRouter()
-  const supabase = createClientComponentClient()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setMessage('')
+    setErrorMsg('')
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
     if (error) {
-      setMessage('Correo o contraseña incorrectos.')
+      setErrorMsg(error.message)
     } else {
-      router.push('/rfpos/dashboard')
+      router.push('/rfpos')
     }
     setLoading(false)
   }
@@ -35,7 +42,7 @@ export default function LoginPage() {
             K
           </div>
           <h1 className="text-xl font-bold">Kiosqly RFPOS</h1>
-          <p className="text-sm text-gray-500">Portal de clientes</p>
+          <p className="text-sm text-gray-500">Iniciar sesión</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
@@ -47,6 +54,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full border rounded-lg p-2.5 text-sm"
+              placeholder="tu@ejemplo.com"
             />
           </div>
 
@@ -58,12 +66,13 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="w-full border rounded-lg p-2.5 text-sm"
+              placeholder="••••••••"
             />
           </div>
 
-          {message && (
-            <div className="p-3 rounded-lg text-sm bg-red-50 text-red-600">
-              {message}
+          {errorMsg && (
+            <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+              {errorMsg}
             </div>
           )}
 
@@ -72,7 +81,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-black text-white font-medium p-2.5 rounded-lg hover:bg-gray-800 transition-colors"
           >
-            {loading ? 'Cargando...' : 'Iniciar sesión'}
+            {loading ? 'Ingresando...' : 'Iniciar Sesión'}
           </button>
         </form>
       </div>
