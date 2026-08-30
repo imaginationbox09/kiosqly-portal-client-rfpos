@@ -1,6 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic'; // <-- Evita el error de pre-renderizado estático en Vercel
+export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
@@ -33,7 +33,9 @@ export default function RfposPortalPage() {
 
       router.push('/rfpos/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Correo o contraseña incorrectos.');
+      // Nos aseguramos de extraer solo el texto del mensaje de error
+      const errorMessage = typeof err === 'string' ? err : err?.message || 'Correo o contraseña incorrectos.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
