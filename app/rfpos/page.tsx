@@ -8,10 +8,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   {
     auth: {
-      persistSession: true,
-      autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      persistSession: true,
     }
   }
 );
@@ -19,63 +17,50 @@ const supabase = createClient(
 export default function UpdatePasswordPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [initializing, setInitializing] = useState(true);
+  const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    const initAuth = async () => {
-      try {
-        // 1. Revisar si hay errores en el hash de la URL
-        const hash = window.location.hash.substring(1);
-        const params = new URLSearchParams(hash);
-        const errorDescription = params.get('error_description');
-        if (errorDescription) {
-          throw new Error(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
-        }
+    // 1. Revisar si hay errores explícitos en el hash de la URL
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const errorDescription = params.get('error_description');
+    if (errorDescription) {
+      if (isMounted) setError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+      return;
+    }
 
-        // 2. Extraer tokens del hash y establecer la sesión explícitamente
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-
-        if (accessToken && refreshToken) {
-          const { data, error: setErr } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (setErr) throw setErr;
-          if (data.session && isMounted) {
-            setSessionReady(true);
-            setInitializing(false);
-            return;
-          }
-        }
-
-        // 3. Comprobación estándar de sesión activa
-        const { data: { session }, error: getErr } = await supabase.auth.getSession();
-        if (getErr) throw getErr;
-
-        if (session && isMounted) {
-          setSessionReady(true);
-        } else {
-          throw new Error('Auth session missing! No se encontró una sesión activa o el enlace expiró.');
-        }
-      } catch (err: any) {
-        if (isMounted) setError(err.message || 'No se pudo validar la sesión.');
-      } finally {
-        if (isMounted) setInitializing(false);
-      }
-    };
-
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && isMounted) {
-        setSessionReady(true);
+    // 2. Escuchar cuando Supabase procese exitosamente los tokens de la URL
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) return;
+      if (session) {
+        setIsReady(true);
         setError(null);
+      }
+    });
+
+    // 3. Comprobación inicial y respaldo por si la sesión ya está activa
+    supabase.auth.getSession().then(async ({ data: { session }, error: sessionError }) => {
+      if (!isMounted) return;
+
+      if (sessionError) {
+        setError(sessionError.message);
+      } else if (session) {
+        setIsReady(true);
+      } else {
+        // Margen de espera por si el cliente está procesando el hash en segundo plano
+        setTimeout(async () => {
+          const { data: { session: delayedSession } } = await supabase.auth.getSession();
+          if (!isMounted) return;
+          if (delayedSession) {
+            setIsReady(true);
+          } else {
+            setError('Auth session missing! El enlace ha expirado o no es válido.');
+          }
+        }, 1200);
       }
     });
 
@@ -91,51 +76,22 @@ export default function UpdatePasswordPage() {
     setError(null);
 
     try {
-      // Intento principal de actualización
-      let { error: updateError } = await supabase.auth.updateUser({ password });
-
-      // Si falla por sesión faltante, forzamos la recarga de la sesión desde el hash de la URL y reintentamos de inmediato
-      if (updateError) {
-        const hash = window.location.hash.substring(1);
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-
-        if (accessToken && refreshToken) {
-          const { error: sessionRetryErr } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          
-          if (!sessionRetryErr) {
-            const retryUpdate = await supabase.auth.updateUser({ password });
-            updateError = retryUpdate.error;
-          }
-        }
+      // Verificación estricta de sesión antes de enviar la nueva contraseña
+      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr || !session) {
+        throw new Error('Auth session missing! La sesión no está activa. Vuelve a abrir el enlace de tu correo.');
       }
 
+      const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
 
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message || 'Ocurrió un error al actualizar la contraseña.');
+      setError(err.message || 'Error al actualizar la contraseña.');
     } finally {
       setLoading(false);
     }
   };
-
-  if (initializing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-        <div className="text-center">
-          <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white font-bold">
-            K
-          </div>
-          <p className="text-sm text-gray-600 font-medium">Verificando acceso...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
@@ -149,8 +105,9 @@ export default function UpdatePasswordPage() {
         </div>
 
         {success ? (
-          <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700 text-center">
-            ¡Contraseña actualizada con éxito! Ya puedes cerrar esta ventana e iniciar sesión.
+          <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700 text-center space-y-2">
+            <p className="font-bold">¡Contraseña actualizada con éxito!</p>
+            <p>Ya puedes cerrar esta ventana e iniciar sesión en tu panel.</p>
           </div>
         ) : (
           <form onSubmit={handleUpdatePassword} className="space-y-4">
@@ -165,6 +122,7 @@ export default function UpdatePasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
                 placeholder="••••••••••••"
+                disabled={!isReady}
               />
             </div>
 
@@ -176,7 +134,7 @@ export default function UpdatePasswordPage() {
 
             <button
               type="submit"
-              disabled={loading || !sessionReady}
+              disabled={loading || !isReady}
               className="w-full rounded-lg bg-black py-2.5 text-white font-medium hover:bg-gray-800 transition disabled:opacity-50"
             >
               {loading ? 'Guardando...' : 'Guardar contraseña'}
