@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation'; // <-- 1. Importar el router
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -15,6 +16,7 @@ const supabase = createClient(
 );
 
 export default function UpdatePasswordPage() {
+  const router = useRouter(); // <-- 2. Inicializar el router
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -24,7 +26,6 @@ export default function UpdatePasswordPage() {
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Revisar si hay errores explícitos en el hash de la URL
     const hash = window.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     const errorDescription = params.get('error_description');
@@ -33,7 +34,6 @@ export default function UpdatePasswordPage() {
       return;
     }
 
-    // 2. Escuchar cuando Supabase procese exitosamente los tokens de la URL
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
       if (session) {
@@ -42,7 +42,6 @@ export default function UpdatePasswordPage() {
       }
     });
 
-    // 3. Comprobación inicial y respaldo por si la sesión ya está activa
     supabase.auth.getSession().then(async ({ data: { session }, error: sessionError }) => {
       if (!isMounted) return;
 
@@ -51,7 +50,6 @@ export default function UpdatePasswordPage() {
       } else if (session) {
         setIsReady(true);
       } else {
-        // Margen de espera por si el cliente está procesando el hash en segundo plano
         setTimeout(async () => {
           const { data: { session: delayedSession } } = await supabase.auth.getSession();
           if (!isMounted) return;
@@ -76,7 +74,6 @@ export default function UpdatePasswordPage() {
     setError(null);
 
     try {
-      // Verificación estricta de sesión antes de enviar la nueva contraseña
       const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr || !session) {
         throw new Error('Auth session missing! La sesión no está activa. Vuelve a abrir el enlace de tu correo.');
@@ -86,6 +83,12 @@ export default function UpdatePasswordPage() {
       if (updateError) throw updateError;
 
       setSuccess(true);
+      
+      // Redirigir automáticamente al portal después de 1.5 segundos
+      setTimeout(() => {
+        router.push('/rfpos'); // Cambia '/rfpos' por la ruta principal de tu portal si es diferente
+      }, 1500);
+
     } catch (err: any) {
       setError(err.message || 'Error al actualizar la contraseña.');
     } finally {
@@ -105,9 +108,15 @@ export default function UpdatePasswordPage() {
         </div>
 
         {success ? (
-          <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700 text-center space-y-2">
+          <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700 text-center space-y-3">
             <p className="font-bold">¡Contraseña actualizada con éxito!</p>
-            <p>Ya puedes cerrar esta ventana e iniciar sesión en tu panel.</p>
+            <p>Redirigiendo al portal...</p>
+            <button
+              onClick={() => router.push('/rfpos')}
+              className="w-full rounded-lg bg-black py-2.5 text-white font-medium hover:bg-gray-800 transition"
+            >
+              Entrar al portal ahora
+            </button>
           </div>
         ) : (
           <form onSubmit={handleUpdatePassword} className="space-y-4">
