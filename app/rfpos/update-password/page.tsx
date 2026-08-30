@@ -2,59 +2,72 @@
 
 import { useState } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useRouter } from 'next/navigation'
 
-export default function SetPasswordForm() {
+export default function UpdatePasswordPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const router = useRouter()
+
   const supabase = createClientComponentClient()
 
-  const handleSetPassword = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setMessage('')
 
-    const { error } = await supabase.auth.updateUser({
-      password: password,
-    })
+    const { error } = await supabase.auth.updateUser({ password })
 
     if (error) {
       setMessage(`Error: ${error.message}`)
-      setLoading(false)
-      return
+    } else {
+      setMessage('¡Contraseña actualizada con éxito! Redirigiendo...')
+      setTimeout(() => {
+        window.location.href = '/rfpos/login'
+      }, 1500)
     }
-
-    setMessage('¡Contraseña guardada con éxito!')
-    setTimeout(() => router.push('/rfpos'), 1500)
+    setLoading(false)
   }
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <form onSubmit={handleSetPassword} className="bg-white p-6 rounded-lg shadow-md max-w-sm w-full space-y-4">
-        <h2 className="text-xl font-bold text-center">Crear Contraseña</h2>
-        <p className="text-sm text-gray-600 text-center">Define tu nueva clave para el portal Kiosqly RFPOS.</p>
+      <div className="bg-white p-8 rounded-2xl shadow-sm border max-w-sm w-full space-y-4">
+        <div className="text-center space-y-2">
+          <div className="w-10 h-10 bg-black text-white font-bold rounded-lg flex items-center justify-center mx-auto">
+            K
+          </div>
+          <h1 className="text-xl font-bold">Kiosqly RFPOS</h1>
+          <p className="text-sm text-gray-500">Crear nueva contraseña</p>
+        </div>
 
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Nueva contraseña"
-          minLength={6}
-          required
-          className="border p-2 rounded w-full border-gray-300"
-        />
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Nueva contraseña</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
+              required
+              className="w-full border rounded-lg p-2.5 text-sm"
+              placeholder="Ingresa mínimo 6 caracteres"
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-black text-white p-2 rounded w-full font-medium"
-        >
-          {loading ? 'Guardando...' : 'Guardar contraseña'}
-        </button>
+          {message && (
+            <div className={`p-3 rounded-lg text-sm ${message.includes('Error') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+              {message}
+            </div>
+          )}
 
-        {message && <p className="text-sm text-center mt-2">{message}</p>}
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-black text-white font-medium p-2.5 rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            {loading ? 'Guardando...' : 'Guardar contraseña'}
+          </button>
+        </form>
+      </div>
     </main>
   )
 }
