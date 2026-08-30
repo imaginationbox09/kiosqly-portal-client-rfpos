@@ -13,22 +13,42 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Canjea el código de la URL por una sesión activa al cargar la página
-    const handleSessionExchange = async () => {
+    const handleSession = async () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
-      
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          setError('El enlace de recuperación ha expirado o es inválido.');
+      const tokenHash = params.get('token_hash');
+      const type = params.get('type');
+
+      try {
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          setIsReady(true);
+        } else if (tokenHash && type) {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as any,
+          });
+          if (error) throw error;
+          setIsReady(true);
+        } else {
+          // Verificar si ya hay una sesión activa en el navegador
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            setIsReady(true);
+          } else {
+            setError('No se encontró un enlace de recuperación válido. Por favor, solicita uno nuevo desde "Recuperar contraseña".');
+          }
         }
+      } catch (err: any) {
+        setError(err.message || 'El enlace de recuperación ha expirado o es inválido.');
       }
     };
 
-    handleSessionExchange();
+    handleSession();
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -86,7 +106,7 @@ export default function UpdatePasswordPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !isReady}
               className="w-full rounded-lg bg-black py-2.5 text-white font-medium hover:bg-gray-800 transition disabled:opacity-50"
             >
               {loading ? 'Guardando...' : 'Guardar contraseña'}
