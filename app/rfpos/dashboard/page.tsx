@@ -18,23 +18,67 @@ const supabase = createClient(
   }
 );
 
+interface Device {
+  id: string;
+  name: string;
+  status: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [deviceName, setDeviceName] = useState('');
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     async function checkUser() {
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error || !session) {
-        router.push('/rfpos'); // Si no hay sesión, regresa al login
+        router.push('/rfpos');
       } else {
         setUserEmail(session.user.email || null);
-        setLoading(false);
+        setUserId(session.user.id);
+        fetchDevices(session.user.id);
       }
     }
     checkUser();
   }, [router]);
+
+  async function fetchDevices(currentUserId: string) {
+    const { data, error } = await supabase
+      .from('kiosks')
+      .select('*')
+      .eq('user_id', currentUserId);
+
+    if (!error && data) {
+      setDevices(data);
+    }
+    setLoading(false);
+  }
+
+  const handleAddDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deviceName.trim() || !userId) return;
+    setAdding(true);
+
+    const { data, error } = await supabase
+      .from('kiosks')
+      .insert([
+        { user_id: userId, name: deviceName, status: 'Prueba / En línea' }
+      ])
+      .select();
+
+    if (error) {
+      alert('Error al registrar equipo: ' + error.message);
+    } else if (data) {
+      setDevices([...devices, data[0]]);
+      setDeviceName('');
+    }
+    setAdding(false);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -71,15 +115,15 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Contenido Principal */}
+        {/* Tarjetas informativas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500">Usuario Conectado</h3>
             <p className="text-lg font-semibold text-gray-900 mt-1 truncate">{userEmail}</p>
           </div>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="text-sm font-medium text-gray-500">Estado del Kiosco</h3>
-            <p className="text-lg font-semibold text-green-600 mt-1">Activo y en línea</p>
+            <h3 className="text-sm font-medium text-gray-500">Equipos Registrados</h3>
+            <p className="text-lg font-semibold text-green-600 mt-1">{devices.length} Activos</p>
           </div>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-500">Suscripción RFPOS</h3>
@@ -87,11 +131,48 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center space-y-3">
-          <h2 className="text-lg font-bold text-gray-900">Bienvenido a tu portal Kiosqly</h2>
-          <p className="text-sm text-gray-500 max-w-md mx-auto">
-            Desde aquí podrás gestionar la configuración de tus menús interactivos, costos y dispositivos self-service.
-          </p>
+        {/* Formulario para agregar equipo de prueba */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+          <h2 className="text-lg font-bold text-gray-900">Agregar Equipo de Prueba / Kiosco</h2>
+          <form onSubmit={handleAddDevice} className="flex gap-4">
+            <input
+              type="text"
+              required
+              placeholder="Nombre del equipo (ej. Kiosco Sucursal Central)"
+              value={deviceName}
+              onChange={(e) => setDeviceName(e.target.value)}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={adding}
+              className="rounded-lg bg-black px-6 py-2 text-white font-medium hover:bg-gray-800 transition disabled:opacity-50"
+            >
+              {adding ? 'Registrando...' : 'Registrar Equipo'}
+            </button>
+          </form>
+        </div>
+
+        {/* Lista de equipos */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+          <h2 className="text-lg font-bold text-gray-900">Tus Kioscos y Equipos</h2>
+          {devices.length === 0 ? (
+            <p className="text-sm text-gray-500">No tienes equipos de prueba registrados todavía.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {devices.map((device) => (
+                <div key={device.id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{device.name}</p>
+                    <p className="text-xs text-gray-500">ID: {device.id}</p>
+                  </div>
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                    {device.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
