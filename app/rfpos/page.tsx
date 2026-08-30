@@ -5,7 +5,15 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    }
+  }
 );
 
 export default function UpdatePasswordPage() {
@@ -14,50 +22,67 @@ export default function UpdatePasswordPage() {
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    const setupSession = async () => {
-      try {
-        // 1. Leer tokens del hash de la URL (#access_token=...)
-        const hash = window.location.hash.substring(1);
-        const hashParams = new URLSearchParams(hash);
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        const errorDescription = hashParams.get('error_description');
+    let isMounted = true;
 
+    const initAuth = async () => {
+      try {
+        // 1. Revisar si hay errores en el hash de la URL
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const errorDescription = params.get('error_description');
         if (errorDescription) {
           throw new Error(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
         }
 
+        // 2. Extraer tokens del hash y establecer la sesión explícitamente
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
         if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
+          const { data, error: setErr } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
-          if (sessionError) throw sessionError;
-        } else {
-          // 2. Si no hay hash, revisar si hay código PKCE en los parámetros de consulta (?code=...)
-          const searchParams = new URLSearchParams(window.location.search);
-          const code = searchParams.get('code');
-          if (code) {
-            const { error: codeError } = await supabase.auth.exchangeCodeForSession(code);
-            if (codeError) throw codeError;
+          if (setErr) throw setErr;
+          if (data.session && isMounted) {
+            setSessionReady(true);
+            setInitializing(false);
+            return;
           }
         }
 
-        // 3. Verificación final obligatoria de que la sesión existe en el cliente
-        const { data: { session }, error: getSessionError } = await supabase.auth.getSession();
-        if (getSessionError || !session) {
-          throw new Error('Auth session missing! El enlace es inválido o ha expirado.');
+        // 3. Comprobación estándar de sesión activa
+        const { data: { session }, error: getErr } = await supabase.auth.getSession();
+        if (getErr) throw getErr;
+
+        if (session && isMounted) {
+          setSessionReady(true);
+        } else {
+          throw new Error('Auth session missing! No se encontró una sesión activa o el enlace expiró.');
         }
       } catch (err: any) {
-        setError(err.message || 'No se pudo validar la sesión.');
+        if (isMounted) setError(err.message || 'No se pudo validar la sesión.');
       } finally {
-        setInitializing(false);
+        if (isMounted) setInitializing(false);
       }
     };
 
-    setupSession();
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && isMounted) {
+        setSessionReady(true);
+        setError(null);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -66,18 +91,34 @@ export default function UpdatePasswordPage() {
     setError(null);
 
     try {
-      // Doble comprobación de seguridad antes de actualizar
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Auth session missing! La sesión expiró.');
+      // Intento principal de actualización
+      let { error: updateError } = await supabase.auth.updateUser({ password });
+
+      // Si falla por sesión faltante, forzamos la recarga de la sesión desde el hash de la URL y reintentamos de inmediato
+      if (updateError) {
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: sessionRetryErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          
+          if (!sessionRetryErr) {
+            const retryUpdate = await supabase.auth.updateUser({ password });
+            updateError = retryUpdate.error;
+          }
+        }
       }
 
-      const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
 
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Ocurrió un error al actualizar la contraseña.');
     } finally {
       setLoading(false);
     }
@@ -90,7 +131,7 @@ export default function UpdatePasswordPage() {
           <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white font-bold">
             K
           </div>
-          <p className="text-sm text-gray-600 font-medium">Validando acceso y sesión...</p>
+          <p className="text-sm text-gray-600 font-medium">Verificando acceso...</p>
         </div>
       </div>
     );
@@ -135,7 +176,7 @@ export default function UpdatePasswordPage() {
 
             <button
               type="submit"
-              disabled={loading || !!error}
+              disabled={loading || !sessionReady}
               className="w-full rounded-lg bg-black py-2.5 text-white font-medium hover:bg-gray-800 transition disabled:opacity-50"
             >
               {loading ? 'Guardando...' : 'Guardar contraseña'}
