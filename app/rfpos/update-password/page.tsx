@@ -1,8 +1,10 @@
 'use client';
 
+export const dynamic = 'force-dynamic'; // Evita errores de pre-renderizado estático en Vercel
+
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { useRouter } from 'next/navigation'; // <-- 1. Importar el router
+import { useRouter } from 'next/navigation';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -16,7 +18,7 @@ const supabase = createClient(
 );
 
 export default function UpdatePasswordPage() {
-  const router = useRouter(); // <-- 2. Inicializar el router
+  const router = useRouter();
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -26,6 +28,7 @@ export default function UpdatePasswordPage() {
   useEffect(() => {
     let isMounted = true;
 
+    // 1. Revisar si hay errores en el hash de la URL
     const hash = window.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     const errorDescription = params.get('error_description');
@@ -34,6 +37,7 @@ export default function UpdatePasswordPage() {
       return;
     }
 
+    // 2. Escuchar cuando Supabase procese los tokens de la URL
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
       if (session) {
@@ -42,6 +46,7 @@ export default function UpdatePasswordPage() {
       }
     });
 
+    // 3. Comprobación inicial de la sesión
     supabase.auth.getSession().then(async ({ data: { session }, error: sessionError }) => {
       if (!isMounted) return;
 
@@ -86,7 +91,7 @@ export default function UpdatePasswordPage() {
       
       // Redirigir automáticamente al portal después de 1.5 segundos
       setTimeout(() => {
-        router.push('/rfpos'); // Cambia '/rfpos' por la ruta principal de tu portal si es diferente
+        router.push('/rfpos');
       }, 1500);
 
     } catch (err: any) {
