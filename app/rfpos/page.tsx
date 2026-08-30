@@ -16,39 +16,60 @@ export default function UpdatePasswordPage() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const handleSession = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const tokenHash = params.get('token_hash');
-      const type = params.get('type');
+    const handleAuthTokens = async () => {
+      // Supabase envía parámetros y errores después del símbolo # (hash)
+      const hash = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hash);
+      
+      const errorDescription = hashParams.get('error_description');
+      const errorCode = hashParams.get('error_code');
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
 
-      try {
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          setIsReady(true);
-        } else if (tokenHash && type) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: type as any,
-          });
-          if (error) throw error;
-          setIsReady(true);
+      // Si Supabase devuelve un error en la URL (ej. enlace expirado)
+      if (errorCode || errorDescription) {
+        const cleanError = decodeURIComponent(errorDescription || 'El enlace ha expirado o no es válido.').replace(/\+/g, ' ');
+        setError(cleanError);
+        return;
+      }
+
+      // Si viene con tokens de sesión en el hash
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) {
+          setError(error.message);
         } else {
-          // Verificar si ya hay una sesión activa en el navegador
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            setIsReady(true);
-          } else {
-            setError('No se encontró un enlace de recuperación válido. Por favor, solicita uno nuevo desde "Recuperar contraseña".');
-          }
+          setIsReady(true);
         }
-      } catch (err: any) {
-        setError(err.message || 'El enlace de recuperación ha expirado o es inválido.');
+        return;
+      }
+
+      // Compatibilidad con parámetros de consulta estándar (?code=...)
+      const searchParams = new URLSearchParams(window.location.search);
+      const code = searchParams.get('code');
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          setError(error.message);
+        } else {
+          setIsReady(true);
+        }
+        return;
+      }
+
+      // Verificar si ya existe una sesión activa
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setIsReady(true);
+      } else {
+        setError('No se encontró un enlace válido. Por favor, solicita un nuevo correo de recuperación.');
       }
     };
 
-    handleSession();
+    handleAuthTokens();
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
