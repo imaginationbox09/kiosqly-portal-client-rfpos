@@ -13,6 +13,7 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
+  //  AQUÍ VA LA FUNCIÓN 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -42,6 +43,7 @@ export default function UpdatePasswordPage() {
           <p className="text-sm text-gray-500">Establece tu nueva contraseña</p>
         </div>
 
+        {/* El formulario llama a handleUpdatePassword aquí */}
         <form onSubmit={handleUpdatePassword} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Nueva contraseña</label>
