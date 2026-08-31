@@ -1,10 +1,13 @@
+Aquí tienes el código completo con la **Integración OAuth Real de WooCommerce** (compatible con el protocolo oficial `/wc-auth/v1/authorize` de tiendas WordPress/WooCommerce auto-hospedadas), junto con la opción de ingreso manual de claves API (`Consumer Key` y `Consumer Secret`) para máxima flexibilidad en restaurantes:
+
+```tsx
 'use client';
 
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, FormEvent } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL as string) || '';
 const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) || '';
@@ -42,6 +45,7 @@ interface Ticket {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +71,13 @@ export default function DashboardPage() {
   const [deviceInstallDate, setDeviceInstallDate] = useState(new Date().toISOString().split('T')[0]);
   const [branchName, setBranchName] = useState('Principal');
 
+  // WooCommerce Real OAuth / Keys State
+  const [wcStoreUrl, setWcStoreUrl] = useState('');
+  const [wcConsumerKey, setWcConsumerKey] = useState('');
+  const [wcConsumerSecret, setWcConsumerSecret] = useState('');
+  const [wcConnected, setWcConnected] = useState(false);
+  const [wcSuccessMsg, setWcSuccessMsg] = useState('');
+
   // Subusuarios y Enlace de Invitación
   const [subUsers, setSubUsers] = useState<SubUser[]>([]);
   const [newSubEmail, setNewSubEmail] = useState('');
@@ -90,6 +101,14 @@ export default function DashboardPage() {
         setUserEmail(currentEmail);
         setUserId(currentUserId);
 
+        const tabParam = searchParams.get('tab');
+        const successParam = searchParams.get('success');
+        if (tabParam) setActiveTab(tabParam);
+        if (successParam === 'true') {
+          setWcConnected(true);
+          setWcSuccessMsg('¡Tienda WooCommerce conectada y sincronizada exitosamente!');
+        }
+
         const { data: subData } = await supabase
           .from('sub_users')
           .select('role')
@@ -98,10 +117,10 @@ export default function DashboardPage() {
 
         if (subData && subData.role === 'Colaborador') {
           setUserRole('Colaborador');
-          setActiveTab('woo');
+          if (!tabParam) setActiveTab('woo');
         } else {
           setUserRole('Administrador');
-          setActiveTab('overview');
+          if (!tabParam) setActiveTab('overview');
         }
 
         await fetchCompanyData(currentUserId);
@@ -112,7 +131,7 @@ export default function DashboardPage() {
       setLoading(false);
     }
     initSession();
-  }, [router]);
+  }, [router, searchParams]);
 
   // PayPal SDK Loader
   useEffect(() => {
@@ -160,6 +179,8 @@ export default function DashboardPage() {
       setCity(data.city || '');
       setContactPhone(data.contact_phone || '');
       setWebsite(data.website || '');
+      if (data.wc_store_url) setWcStoreUrl(data.wc_store_url);
+      if (data.wc_connected) setWcConnected(data.wc_connected);
     } else {
       await supabase.from('companies').insert([{ 
         user_id: uid, 
@@ -168,7 +189,8 @@ export default function DashboardPage() {
         address: 'Calle Principal', 
         city: 'Panamá', 
         contact_phone: '+507 6000-0000',
-        website: 'https://mitienda.com'
+        website: 'https://mitienda.com',
+        wc_connected: false
       }]);
       setCompanyName('Mi Restaurante S.A.');
     }
@@ -202,6 +224,53 @@ export default function DashboardPage() {
     else {
       setSavedMessage('¡Información actualizada con éxito!');
       setTimeout(() => setSavedMessage(''), 4000);
+    }
+  };
+
+  const handleWcOAuthConnect = (e: FormEvent) => {
+    e.preventDefault();
+    if (!wcStoreUrl.trim()) {
+      setErrorMessage('Por favor ingresa la URL de tu tienda WooCommerce.');
+      return;
+    }
+    let cleanUrl = wcStoreUrl.trim().replace(/\/$/, '');
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+
+    const appName = encodeURIComponent('Kiosqly RFPOS');
+    const scope = 'read_write';
+    const returnUrl = encodeURIComponent(`${window.location.origin}${window.location.pathname}?tab=woo&success=true`);
+    const callbackUrl = encodeURIComponent(`${window.location.origin}/api/woocommerce/callback`);
+
+    const authUrl = `${cleanUrl}/wc-auth/v1/authorize?app_name=${appName}&scope=${scope}&user_id=${userId || 'guest'}&return_url=${returnUrl}&callback_url=${callbackUrl}`;
+    window.location.href = authUrl;
+  };
+
+  const handleSaveWcManualKeys = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!userId || !wcConsumerKey || !wcConsumerSecret) {
+      setErrorMessage('Ingresa Consumer Key y Consumer Secret válidos.');
+      return;
+    }
+    setErrorMessage('');
+    const { error } = await supabase
+      .from('companies')
+      .update({ 
+        wc_store_url: wcStoreUrl, 
+        consumer_key: wcConsumerKey, 
+        consumer_secret: wcConsumerSecret, 
+        wc_connected: true,
+        updated_at: new Date() 
+      })
+      .eq('user_id', userId);
+
+    if (error) {
+      setErrorMessage('Error al guardar claves WooCommerce: ' + error.message);
+    } else {
+      setWcConnected(true);
+      setWcSuccessMsg('¡Credenciales API REST de WooCommerce guardadas y conectadas con éxito!');
+      setTimeout(() => setWcSuccessMsg(''), 5000);
     }
   };
 
@@ -508,23 +577,85 @@ export default function DashboardPage() {
           {activeTab === 'woo' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Sincronización WooCommerce</h2>
-                <span className="text-xs bg-purple-100 text-purple-700 font-bold px-3 py-1 rounded-full">Integración Segura OAuth</span>
+                <h2 className="text-2xl font-bold text-gray-900">Sincronización WooCommerce Real (OAuth & API)</h2>
+                <span className={`text-xs font-bold px-3 py-1 rounded-full ${wcConnected ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
+                  {wcConnected ? '🟢 Tienda Conectada' : '🟡 Pendiente de Conexión'}
+                </span>
               </div>
-              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 text-center space-y-6 max-w-xl mx-auto">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 text-2xl mx-auto font-bold shadow-inner">W</div>
-                <div className="space-y-2">
-                  <h3 className="font-bold text-gray-900 text-lg">Conectar Tienda WooCommerce / WordPress.com</h3>
-                  <p className="text-xs text-gray-500">Autoriza el acceso seguro mediante la plataforma oficial para sincronizar menús, productos y órdenes en tiempo real con tus equipos RFPOS.</p>
+
+              {wcSuccessMsg && (
+                <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">
+                  {wcSuccessMsg}
                 </div>
-                <a
-                  href="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block w-full rounded-2xl bg-[#96588a] text-white font-bold py-3.5 text-sm hover:bg-[#7b4671] shadow-md shadow-purple-900/10 transition"
-                >
-                  Conectar con WooCommerce / WordPress.com ↗
-                </a>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Opción 1: Conexión Automática WooCommerce OAuth */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 text-xl font-bold">W</div>
+                    <h3 className="font-bold text-gray-900 text-lg">1. Conexión Rápida WooCommerce OAuth</h3>
+                    <p className="text-xs text-gray-500">Ingresa la URL pública de tu tienda WordPress con WooCommerce para autorizar la conexión automática de catálogos y órdenes.</p>
+                  </div>
+
+                  <form onSubmit={handleWcOAuthConnect} className="space-y-4 pt-2">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 uppercase">URL de tu Tienda</label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="https://mirestaurante.com" 
+                        value={wcStoreUrl} 
+                        onChange={(e) => setWcStoreUrl(e.target.value)} 
+                        className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-black focus:outline-none" 
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="w-full rounded-2xl bg-[#96588a] text-white font-bold py-3 text-sm hover:bg-[#7b4671] shadow-md transition"
+                    >
+                      Conectar vía WooCommerce Auth ↗
+                    </button>
+                  </form>
+                </div>
+
+                {/* Opción 2: Conexión Manual con Claves API REST */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-800 text-xl font-bold">🔑</div>
+                    <h3 className="font-bold text-gray-900 text-lg">2. Conexión Manual (Consumer Keys)</h3>
+                    <p className="text-xs text-gray-500">Genera tus claves en <em>WooCommerce &gt; Ajustes &gt; Avanzado &gt; API REST</em> (Permisos: Lectura/Escritura) e ingrésalas aquí.</p>
+                  </div>
+
+                  <form onSubmit={handleSaveWcManualKeys} className="space-y-3">
+                    <div>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Consumer Key (ck_...)" 
+                        value={wcConsumerKey} 
+                        onChange={(e) => setWcConsumerKey(e.target.value)} 
+                        className="w-full rounded-xl border border-gray-300 px-4 py-2 text-xs font-mono focus:border-black focus:outline-none" 
+                      />
+                    </div>
+                    <div>
+                      <input 
+                        type="password" 
+                        required 
+                        placeholder="Consumer Secret (cs_...)" 
+                        value={wcConsumerSecret} 
+                        onChange={(e) => setWcConsumerSecret(e.target.value)} 
+                        className="w-full rounded-xl border border-gray-300 px-4 py-2 text-xs font-mono focus:border-black focus:outline-none" 
+                      />
+                    </div>
+                    <button 
+                      type="submit" 
+                      className="w-full rounded-2xl bg-black text-white font-bold py-3 text-sm hover:bg-gray-800 transition"
+                    >
+                      Guardar y Validar Credenciales
+                    </button>
+                  </form>
+                </div>
               </div>
             </div>
           )}
@@ -651,3 +782,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+```
