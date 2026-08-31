@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Device {
@@ -22,13 +21,6 @@ interface SubUser {
   id: string;
   email: string;
   role: 'Administrador' | 'Colaborador';
-}
-
-interface Subscription {
-  plan_name: string;
-  max_devices: number;
-  status: string;
-  next_billing: string;
 }
 
 interface Ticket {
@@ -51,30 +43,28 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<string>('overview');
-
   const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');
 
-  // Empresa
+  // Empresa (Campos completos)
   const [companyName, setCompanyName] = useState('');
+  const [rucNit, setRucNit] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [website, setWebsite] = useState('');
   const [savedMessage, setSavedMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // Equipos y Planes PayPal
+  // Equipos
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceName, setDeviceName] = useState('');
-  const [subscription, setSubscription] = useState<Subscription>({
-    plan_name: 'RFPOS Pro',
-    max_devices: 5,
-    status: 'Activo',
-    next_billing: '2026-09-30'
-  });
 
   // Subusuarios
   const [subUsers, setSubUsers] = useState<SubUser[]>([]);
   const [newSubEmail, setNewSubEmail] = useState('');
   const [newSubRole, setNewSubRole] = useState<'Administrador' | 'Colaborador'>('Colaborador');
 
-  // Soporte y Tickets
+  // Tickets
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
@@ -107,7 +97,6 @@ export default function DashboardPage() {
 
         await fetchCompanyData(currentUserId);
         await fetchDevices(currentUserId);
-        await fetchSubscription(currentUserId);
         await fetchSubUsers(currentUserId);
         await fetchTickets(currentUserId);
       }
@@ -116,7 +105,7 @@ export default function DashboardPage() {
     initSession();
   }, [router]);
 
-  // Renderizar SDK de PayPal dinámicamente cuando esté en la pestaña de facturación
+  // PayPal SDK Loader Estético
   useEffect(() => {
     if (activeTab === 'billing' && userRole === 'Administrador') {
       const scriptId = 'paypal-sdk-script';
@@ -147,11 +136,11 @@ export default function DashboardPage() {
         createSubscription: function(data: any, actions: any) {
           return actions.subscription.create({
             plan_id: 'P-5XX972822Y4491137NKJSEEY',
-            quantity: devices.length > 0 ? devices.length : 1 // Cantidad basada en equipos activos asignados
+            quantity: devices.length > 0 ? devices.length : 1
           });
         },
         onApprove: function(data: any, actions: any) {
-          alert('¡Suscripción de PayPal procesada con éxito! ID de Suscripción: ' + data.subscriptionID);
+          alert('¡Suscripción procesada con éxito! ID: ' + data.subscriptionID);
         }
       }).render('#paypal-button-container-P-5XX972822Y4491137NKJSEEY');
     }
@@ -161,22 +150,33 @@ export default function DashboardPage() {
     const { data } = await supabase.from('companies').select('*').eq('user_id', uid).single();
     if (data) {
       setCompanyName(data.company_name || '');
+      setRucNit(data.ruc_nit || '');
+      setAddress(data.address || '');
+      setCity(data.city || '');
       setContactPhone(data.contact_phone || '');
+      setWebsite(data.website || '');
     } else {
-      await supabase.from('companies').insert([{ user_id: uid, company_name: 'Mi Restaurante S.A.', contact_phone: '+507 6000-0000' }]);
+      await supabase.from('companies').insert([{ 
+        user_id: uid, 
+        company_name: 'Mi Restaurante S.A.', 
+        ruc_nit: '1234567-1-123456', 
+        address: 'Calle Principal', 
+        city: 'Panamá', 
+        contact_phone: '+507 6000-0000',
+        website: 'https://mitienda.com'
+      }]);
       setCompanyName('Mi Restaurante S.A.');
+      setRucNit('1234567-1-123456');
+      setAddress('Calle Principal');
+      setCity('Panamá');
       setContactPhone('+507 6000-0000');
+      setWebsite('https://mitienda.com');
     }
   }
 
   async function fetchDevices(uid: string) {
     const { data } = await supabase.from('kiosks').select('*').eq('user_id', uid);
     if (data) setDevices(data);
-  }
-
-  async function fetchSubscription(uid: string) {
-    const { data } = await supabase.from('subscriptions').select('*').eq('user_id', uid).single();
-    if (data) setSubscription(data);
   }
 
   async function fetchSubUsers(uid: string) {
@@ -192,12 +192,23 @@ export default function DashboardPage() {
   const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
+    setErrorMessage('');
     const { error } = await supabase
       .from('companies')
-      .update({ company_name: companyName, contact_phone: contactPhone, updated_at: new Date() })
+      .update({ 
+        company_name: companyName, 
+        ruc_nit: rucNit, 
+        address, 
+        city, 
+        contact_phone: contactPhone, 
+        website, 
+        updated_at: new Date() 
+      })
       .eq('user_id', userId);
 
-    if (!error) {
+    if (error) {
+      setErrorMessage('Error al guardar: ' + error.message);
+    } else {
       setSavedMessage('¡Información de empresa actualizada con éxito!');
       setTimeout(() => setSavedMessage(''), 4000);
     }
@@ -206,48 +217,57 @@ export default function DashboardPage() {
   const handleAddDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deviceName.trim() || !userId) return;
+    setErrorMessage('');
 
     const { data, error } = await supabase
       .from('kiosks')
-      .insert([{ user_id: userId, name: deviceName, status: 'En línea', ip: '192.168.1.60' }])
+      .insert([{ user_id: userId, name: deviceName, status: 'En línea', ip: '192.168.1.' + Math.floor(Math.random() * 200 + 10) }])
       .select();
 
-    if (!error && data) {
+    if (error) {
+      setErrorMessage('No se pudo agregar el equipo: ' + error.message);
+    } else if (data) {
       setDevices([...devices, data[0]]);
       setDeviceName('');
-    }
-  };
-
-  const handleCreateTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId || !ticketSubject.trim() || !ticketMessage.trim()) return;
-
-    const { data, error } = await supabase
-      .from('tickets')
-      .insert([{ user_id: userId, subject: ticketSubject, message: ticketMessage, status: 'Abierto' }])
-      .select();
-
-    if (!error && data) {
-      setTickets([data[0], ...tickets]);
-      setTicketSubject('');
-      setTicketMessage('');
-      setTicketSuccess(true);
-      setTimeout(() => setTicketSuccess(false), 4000);
     }
   };
 
   const handleCreateSubUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubEmail.trim() || !userId) return;
+    setErrorMessage('');
 
     const { data, error } = await supabase
       .from('sub_users')
       .insert([{ user_id: userId, email: newSubEmail, role: newSubRole }])
       .select();
 
-    if (!error && data) {
+    if (error) {
+      setErrorMessage('No se pudo crear el subusuario: ' + error.message);
+    } else if (data) {
       setSubUsers([...subUsers, data[0]]);
       setNewSubEmail('');
+    }
+  };
+
+  const handleCreateTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId || !ticketSubject.trim() || !ticketMessage.trim()) return;
+    setErrorMessage('');
+
+    const { data, error } = await supabase
+      .from('tickets')
+      .insert([{ user_id: userId, subject: ticketSubject, message: ticketMessage, status: 'Abierto' }])
+      .select();
+
+    if (error) {
+      setErrorMessage('No se pudo crear el ticket: ' + error.message);
+    } else if (data) {
+      setTickets([data[0], ...tickets]);
+      setTicketSubject('');
+      setTicketMessage('');
+      setTicketSuccess(true);
+      setTimeout(() => setTicketSuccess(false), 4000);
     }
   };
 
@@ -278,17 +298,17 @@ export default function DashboardPage() {
 
           <nav className="space-y-1">
             {(userRole === 'Administrador' ? [
-              { id: 'overview', label: '📊 General & Empresa' },
+              { id: 'overview', label: '📊 Perfil & Empresa' },
               { id: 'devices', label: '🖥️ Equipos RFPOS' },
-              { id: 'woo', label: '🛍️ WooCommerce & Tienda' },
-              { id: 'billing', label: '💳 Facturación & PayPal' },
-              { id: 'users', label: '👥 Usuarios & Roles' },
+              { id: 'woo', label: '🛍️ WooCommerce' },
+              { id: 'billing', label: '💳 Facturación PayPal' },
+              { id: 'users', label: '👥 Subusuarios & Roles' },
               { id: 'tickets', label: '🎫 Soporte & Tickets' },
-              { id: 'whatsapp', label: '💬 Chat WhatsApp' },
+              { id: 'whatsapp', label: '💬 Asistencia WhatsApp' },
             ] : [
-              { id: 'woo', label: '🛍️ WooCommerce & Tienda' },
+              { id: 'woo', label: '🛍️ WooCommerce' },
               { id: 'tickets', label: '🎫 Soporte & Tickets' },
-              { id: 'whatsapp', label: '💬 Chat WhatsApp' },
+              { id: 'whatsapp', label: '💬 Asistencia WhatsApp' },
             ]).map((tab) => (
               <button
                 key={tab.id}
@@ -304,7 +324,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="pt-6 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-800">{userEmail}</p>
+          <p className="text-xs font-semibold text-gray-800 truncate">{userEmail}</p>
           <p className="text-xs text-green-600 mb-3">Rol: {userRole}</p>
           <button
             onClick={handleLogout}
@@ -318,30 +338,45 @@ export default function DashboardPage() {
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <div className="max-w-4xl mx-auto space-y-6">
 
+          {errorMessage && (
+            <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">
+              {errorMessage}
+            </div>
+          )}
+
           {activeTab === 'overview' && userRole === 'Administrador' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Información del Usuario y Empresa</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Perfil de Empresa y Datos Fiscales</h2>
               {savedMessage && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">{savedMessage}</div>}
+              
               <form onSubmit={handleSaveCompany} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Nombre de la Empresa</label>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Nombre Comercial / Empresa</label>
                     <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Correo de Contacto</label>
-                    <input type="email" disabled value={userEmail || ''} className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-500" />
+                    <label className="text-xs font-semibold text-gray-500 uppercase">RUC / NIT</label>
+                    <input type="text" value={rucNit} onChange={(e) => setRucNit(e.target.value)} placeholder="Ej. 1555555-1-2023" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Dirección Física</label>
+                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ej. Vía Argentina, Edificio Plaza" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Ciudad / Provincia</label>
+                    <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ej. Panamá" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Teléfono de Contacto</label>
                     <input type="text" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">País / Operación</label>
-                    <input type="text" disabled value="Panamá" className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-500" />
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Sitio Web / Tienda Online</label>
+                    <input type="text" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                 </div>
-                <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Guardar Cambios</button>
+                <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Actualizar Perfil de Empresa</button>
               </form>
             </div>
           )}
@@ -356,18 +391,18 @@ export default function DashboardPage() {
               </div>
 
               <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex gap-4">
-                <input type="text" required placeholder="Nombre del nuevo equipo (ej. Kiosco Caja 2)" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="flex-1 rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                <input type="text" required placeholder="Nombre del nuevo equipo (ej. Kiosco Caja Principal)" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="flex-1 rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 <button type="submit" className="rounded-xl bg-black px-6 py-2 text-white font-medium text-sm">Dar de Alta</button>
               </form>
 
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Equipos Registrados en el Sistema</h3>
+                <h3 className="font-bold text-gray-900 text-lg">Equipos Registrados</h3>
                 <div className="divide-y divide-gray-100">
                   {devices.map((device) => (
                     <div key={device.id} className="py-3 flex justify-between items-center text-sm">
                       <div>
                         <p className="font-medium text-gray-900">{device.name}</p>
-                        <p className="text-xs text-gray-500">IP Asignada: {device.ip || '192.168.1.60'}</p>
+                        <p className="text-xs text-gray-500">IP: {device.ip || '192.168.1.50'}</p>
                       </div>
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">● {device.status}</span>
                     </div>
@@ -380,21 +415,23 @@ export default function DashboardPage() {
 
           {activeTab === 'woo' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Sincronización WooCommerce</h2>
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-xl mx-auto text-center space-y-6">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 text-2xl mx-auto font-bold">W</div>
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg">Conectar con WooCommerce / WordPress.com</h3>
-                  <p className="text-xs text-gray-500 mt-1">Autoriza el acceso a tu tienda para sincronizar productos, menús y órdenes en tiempo real con tus equipos RFPOS.</p>
-                </div>
-                <a
-                  href="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-900">Sincronización WooCommerce</h2>
+                <a 
+                  href="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%25252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block w-full rounded-xl bg-[#96588a] text-white font-bold py-3 text-sm hover:bg-[#7b4671] transition"
+                  className="text-xs text-purple-700 font-semibold hover:underline"
                 >
-                  Conectar con WooCommerce.com
+                  Abrir login en pestaña completa ↗
                 </a>
+              </div>
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-[600px] flex flex-col">
+                <iframe
+                  src="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
+                  title="WooCommerce WordPress Login"
+                  className="w-full flex-1 rounded-xl border border-gray-200"
+                />
               </div>
             </div>
           )}
@@ -402,17 +439,22 @@ export default function DashboardPage() {
           {activeTab === 'billing' && userRole === 'Administrador' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900">Facturación & Suscripción PayPal</h2>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
-                <div className="flex justify-between items-center border-b pb-4">
+              <div className="bg-gradient-to-br from-white to-amber-50/30 p-8 rounded-3xl shadow-sm border border-amber-100 space-y-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-6 gap-4">
                   <div>
-                    <h3 className="font-bold text-gray-900 text-lg">Plan Kiosqly RFPOS (Cobro por Equipo)</h3>
-                    <p className="text-xs text-gray-500">Cantidad actual vinculada a la suscripción: <strong>{devices.length || 1} equipo(s)</strong></p>
+                    <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">Suscripción Automatizada</span>
+                    <h3 className="font-extrabold text-gray-900 text-xl mt-2">Kiosqly RFPOS Plan por Equipos</h3>
+                    <p className="text-xs text-gray-500 mt-1">El monto mensual se calcula automáticamente según tus equipos activos en la plataforma.</p>
                   </div>
-                  <span className="px-4 py-1.5 bg-black text-white text-xs font-bold rounded-xl">Activo</span>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400 uppercase font-semibold">Equipos Licenciados</p>
+                    <p className="text-2xl font-black text-gray-900">{devices.length || 1} <span className="text-sm font-normal text-gray-500">equipos</span></p>
+                  </div>
                 </div>
-                <div className="p-6 bg-gray-50 border border-gray-200 rounded-xl text-center space-y-4">
-                  <p className="text-xs text-gray-600 font-medium">Realiza o actualiza tu pago de suscripción mensual vía PayPal de forma automática:</p>
-                  <div id="paypal-button-container-P-5XX972822Y4491137NKJSEEY" className="flex justify-center"></div>
+
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-inner flex flex-col items-center justify-center space-y-4">
+                  <p className="text-xs text-gray-600 font-medium text-center">Completa tu pago o activa tu renovación automática segura con PayPal:</p>
+                  <div id="paypal-button-container-P-5XX972822Y4491137NKJSEEY" className="w-full flex justify-center"></div>
                 </div>
               </div>
             </div>
@@ -422,13 +464,14 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900">Gestión de Subusuarios y Roles</h2>
               <form onSubmit={handleCreateSubUser} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                <h3 className="font-bold text-gray-900 text-md">Invitar o Agregar Nuevo Usuario</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input type="email" required placeholder="empleado@restaurante.com" value={newSubEmail} onChange={(e) => setNewSubEmail(e.target.value)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm" />
-                  <select value={newSubRole} onChange={(e) => setNewSubRole(e.target.value as any)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white">
+                  <input type="email" required placeholder="empleado@restaurante.com" value={newSubEmail} onChange={(e) => setNewSubEmail(e.target.value)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <select value={newSubRole} onChange={(e) => setNewSubRole(e.target.value as any)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
                     <option value="Colaborador">Colaborador (Solo Tienda)</option>
                     <option value="Administrador">Administrador (Acceso Total)</option>
                   </select>
-                  <button type="submit" className="rounded-xl bg-black px-6 py-2 text-white font-medium text-sm">Crear Subusuario</button>
+                  <button type="submit" className="rounded-xl bg-black px-6 py-2 text-white font-medium text-sm hover:bg-gray-800 transition">Crear Subusuario</button>
                 </div>
               </form>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
@@ -455,11 +498,11 @@ export default function DashboardPage() {
                 <h3 className="font-bold text-gray-900 text-md">Crear Nuevo Ticket</h3>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Asunto</label>
-                  <input type="text" required value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} placeholder="Ej. Problema con sincronización de impresora" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <input type="text" required value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} placeholder="Ej. Duda con sincronización de inventario" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Detalle del Requerimiento</label>
-                  <textarea required rows={3} value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} placeholder="Describe detalladamente el inconveniente..." className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <textarea required rows={3} value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} placeholder="Describe detalladamente tu solicitud..." className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 </div>
                 <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Enviar y Registrar Ticket</button>
               </form>
@@ -484,11 +527,20 @@ export default function DashboardPage() {
           )}
 
           {activeTab === 'whatsapp' && (
-            <div className="space-y-6 text-center bg-white p-10 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600 text-2xl mx-auto font-bold">💬</div>
-              <h3 className="font-bold text-gray-900 text-lg">Canal de Asistencia WhatsApp</h3>
-              <p className="text-sm text-gray-500 max-w-md mx-auto">Comunícate en tiempo real con nuestros ingenieros de soporte técnico llamando o escribiendo al <strong>+507 63110603</strong>.</p>
-              <a href="https://wa.me/50763110603?text=Hola,%20necesito%20asistencia%20con%20mi%20portal%20RFPOS." target="_blank" rel="noopener noreferrer" className="inline-block rounded-xl bg-green-600 text-white font-bold px-8 py-3.5 text-sm hover:bg-green-700 transition">Abrir WhatsApp (+507 63110603)</a>
+            <div className="space-y-6 text-center bg-white p-12 rounded-3xl shadow-sm border border-gray-100 max-w-xl mx-auto">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl mx-auto font-bold shadow-inner">💬</div>
+              <div className="space-y-2">
+                <h3 className="font-bold text-gray-900 text-xl">Canal de Asistencia Directa</h3>
+                <p className="text-sm text-gray-500">Conéctate al instante con nuestro equipo de ingeniería y soporte técnico especializado para resolver cualquier consulta sobre tus equipos RFPOS.</p>
+              </div>
+              <a 
+                href="https://wa.me/50763110603?text=Hola,%20necesito%20asistencia%20con%20mi%20portal%20RFPOS." 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-block rounded-2xl bg-green-600 text-white font-bold px-8 py-4 text-sm hover:bg-green-700 shadow-lg shadow-green-600/20 transition transform active:scale-95"
+              >
+                Abrir Chat de Soporte Técnico
+              </a>
             </div>
           )}
 
