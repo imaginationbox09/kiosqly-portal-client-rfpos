@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Equipos RFPOS Detallados y Telemetría Lenovo
+  // Equipos RFPOS Detallados y Telemetría
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceName, setDeviceName] = useState('');
   const [deviceModel, setDeviceModel] = useState('Lenovo Tab M11 (Kiosqly RFPOS)');
@@ -341,7 +341,7 @@ export default function DashboardPage() {
           <nav className="space-y-1">
             {(userRole === 'Administrador' ? [
               { id: 'overview', label: '📊 Perfil & Empresa' },
-              { id: 'devices', label: '🖥️ Tablets Lenovo & Telemetría' },
+              { id: 'devices', label: '🖥️ RFPOS Terminal Fleet & Telemetry' },
               { id: 'woo', label: '🛍️ WooCommerce' },
               { id: 'billing', label: '💳 Facturación PayPal' },
               { id: 'users', label: '👥 Subusuarios & Roles' },
@@ -426,21 +426,21 @@ export default function DashboardPage() {
           {activeTab === 'devices' && userRole === 'Administrador' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Tablets Lenovo & Telemetría (Mini-MDM)</h2>
+                <h2 className="text-2xl font-bold text-gray-900">RFPOS Terminal Fleet & Telemetry</h2>
                 <span className="px-3 py-1 bg-black text-white text-xs font-bold rounded-xl">
-                  Total Tablets: {devices.length}
+                  Total Terminals: {devices.length}
                 </span>
               </div>
 
               <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nueva Tablet Lenovo</h3>
+                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nueva Estación / Tablet RFPOS</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Nombre / Ubicación</label>
                     <input type="text" required placeholder="Ej. Kiosco Caja Principal" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Tablet</label>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Estación</label>
                     <select value={deviceModel} onChange={(e) => setDeviceModel(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
                       <option value="Lenovo Tab M11 (Kiosqly RFPOS)">Lenovo Tab M11</option>
                       <option value="Lenovo Tab M10 Plus">Lenovo Tab M10 Plus</option>
@@ -452,7 +452,7 @@ export default function DashboardPage() {
                     <input type="text" placeholder="Ej. Vía España" value={branchName} onChange={(e) => setBranchName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Serial / ID de la Tablet</label>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Serial / ID del Dispositivo</label>
                     <input type="text" placeholder="Ej. SN-LENOVO-984" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
@@ -460,7 +460,7 @@ export default function DashboardPage() {
                     <input type="date" required value={deviceInstallDate} onChange={(e) => setDeviceInstallDate(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div className="flex items-end">
-                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Registrar Tablet</button>
+                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Registrar Estación</button>
                   </div>
                 </div>
               </form>
@@ -480,7 +480,7 @@ export default function DashboardPage() {
                       <div key={device.id} className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-sm">
                         <div className="space-y-1">
                           <p className="font-bold text-gray-900 text-base">
-                            {device.name} <span className="text-xs font-normal text-gray-500">({device.model || 'Lenovo Tab'})</span>
+                            {device.name} <span className="text-xs font-normal text-gray-500">({device.model || 'RFPOS Station'})</span>
                           </p>
                           <p className="text-xs text-gray-500">
                             Sucursal: <span className="font-semibold text-gray-700">{device.branch_name || 'Principal'}</span> | Serial: <span className="font-mono text-gray-700">{device.serial_number || 'N/A'}</span>
@@ -501,7 +501,7 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
-                  {devices.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay tablets Lenovo registradas todavía.</p>}
+                  {devices.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay estaciones RFPOS registradas todavía.</p>}
                 </div>
               </div>
             </div>
@@ -539,11 +539,11 @@ export default function DashboardPage() {
                   <div>
                     <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">Suscripción Automatizada</span>
                     <h3 className="font-extrabold text-gray-900 text-xl mt-2">Plan Kiosqly RFPOS por Equipos</h3>
-                    <p className="text-xs text-gray-500 mt-1">El cobro mensual se ajusta dinámicamente según la cantidad de tablets activas registradas.</p>
+                    <p className="text-xs text-gray-500 mt-1">El cobro mensual se ajusta dinámicamente según la cantidad de estaciones activas registradas.</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-400 uppercase font-semibold">Tablets Licenciadas</p>
-                    <p className="text-2xl font-black text-gray-900">{devices.length || 1} <span className="text-sm font-normal text-gray-500">tablets</span></p>
+                    <p className="text-xs text-gray-400 uppercase font-semibold">Estaciones Licenciadas</p>
+                    <p className="text-2xl font-black text-gray-900">{devices.length || 1} <span className="text-sm font-normal text-gray-500">terminals</span></p>
                   </div>
                 </div>
 
