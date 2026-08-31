@@ -2,12 +2,12 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL as string) || '';
+const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Device {
@@ -18,6 +18,12 @@ interface Device {
   installation_date: string;
   status: string;
   ip: string;
+  battery_level?: number;
+  wifi_signal?: string;
+  charging_status?: string;
+  last_seen?: string;
+  branch_name?: string;
+  created_at?: string;
 }
 
 interface SubUser {
@@ -32,12 +38,6 @@ interface Ticket {
   message: string;
   status: string;
   created_at: string;
-}
-
-declare global {
-  interface Window {
-    paypal: any;
-  }
 }
 
 export default function DashboardPage() {
@@ -58,13 +58,14 @@ export default function DashboardPage() {
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Equipos RFPOS Detallados
+  // Equipos RFPOS Detallados y Telemetría Lenovo
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceName, setDeviceName] = useState('');
-  const [deviceModel, setDeviceModel] = useState('Kiosqly Pro V2');
+  const [deviceModel, setDeviceModel] = useState('Lenovo Tab M11 (Kiosqly RFPOS)');
   const [deviceSerial, setDeviceSerial] = useState('');
   const [deviceIp, setDeviceIp] = useState('192.168.1.50');
   const [deviceInstallDate, setDeviceInstallDate] = useState(new Date().toISOString().split('T')[0]);
+  const [branchName, setBranchName] = useState('Principal');
 
   // Subusuarios y Enlace de Invitación
   const [subUsers, setSubUsers] = useState<SubUser[]>([]);
@@ -128,13 +129,14 @@ export default function DashboardPage() {
         renderPayPalButtons();
       }
     }
-  }, [activeTab, devices.length]);
+  }, [activeTab, devices.length, userRole]);
 
   function renderPayPalButtons() {
     const container = document.getElementById('paypal-button-container-P-5XX972822Y4491137NKJSEEY');
-    if (container && window.paypal) {
+    const paypal = (window as any).paypal;
+    if (container && paypal) {
       container.innerHTML = '';
-      window.paypal.Buttons({
+      paypal.Buttons({
         style: { shape: 'rect', color: 'gold', layout: 'vertical', label: 'subscribe' },
         createSubscription: function(data: any, actions: any) {
           return actions.subscription.create({
@@ -142,7 +144,7 @@ export default function DashboardPage() {
             quantity: devices.length > 0 ? devices.length : 1
           });
         },
-        onApprove: function(data: any, actions: any) {
+        onApprove: async function(data: any, actions: any) {
           alert('¡Suscripción procesada con éxito! ID: ' + data.subscriptionID);
         }
       }).render('#paypal-button-container-P-5XX972822Y4491137NKJSEEY');
@@ -187,7 +189,7 @@ export default function DashboardPage() {
     if (data) setTickets(data);
   }
 
-  const handleSaveCompany = async (e: React.FormEvent) => {
+  const handleSaveCompany = async (e: FormEvent) => {
     e.preventDefault();
     if (!userId) return;
     setErrorMessage('');
@@ -203,7 +205,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleAddDevice = async (e: React.FormEvent) => {
+  const handleAddDevice = async (e: FormEvent) => {
     e.preventDefault();
     if (!deviceName.trim() || !userId) return;
     setErrorMessage('');
@@ -214,10 +216,15 @@ export default function DashboardPage() {
         user_id: userId, 
         name: deviceName, 
         model: deviceModel, 
-        serial_number: deviceSerial || `SN-${Math.floor(Math.random() * 89999 + 10000)}`,
+        serial_number: deviceSerial || `SN-TAB-${Math.floor(Math.random() * 89999 + 10000)}`,
         installation_date: deviceInstallDate,
         status: 'En línea', 
-        ip: deviceIp || '192.168.1.50' 
+        ip: deviceIp || '192.168.1.50',
+        branch_name: branchName || 'Principal',
+        battery_level: 100,
+        wifi_signal: 'Excelente',
+        charging_status: 'Conectado',
+        last_seen: new Date().toISOString()
       }])
       .select();
 
@@ -229,7 +236,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCreateSubUser = async (e: React.FormEvent) => {
+  const handleCreateSubUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!newSubEmail.trim() || !userId) return;
     setErrorMessage('');
@@ -248,12 +255,11 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCreateTicket = async (e: React.FormEvent) => {
+  const handleCreateTicket = async (e: FormEvent) => {
     e.preventDefault();
     if (!userId || !ticketSubject.trim() || !ticketMessage.trim()) return;
     setErrorMessage('');
 
-    // 1. Guardar en Supabase
     const { data, error } = await supabase
       .from('tickets')
       .insert([{ user_id: userId, subject: ticketSubject, message: ticketMessage, status: 'Abierto' }])
@@ -264,7 +270,6 @@ export default function DashboardPage() {
       return;
     }
 
-    // 2. Enviar copia por correo a info@kiosqly.com mediante FormSubmit
     try {
       await fetch('https://formsubmit.co/ajax/info@kiosqly.com', {
         method: 'POST',
@@ -295,7 +300,6 @@ export default function DashboardPage() {
     router.push('/rfpos');
   };
 
-  // Calcular días restantes de suscripción mensual (basado en instalación o ciclo de 30 días)
   const calculateDaysRemaining = (installDate: string) => {
     const install = new Date(installDate);
     const nextBilling = new Date(install);
@@ -304,6 +308,14 @@ export default function DashboardPage() {
     const diffTime = nextBilling.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays > 0 ? diffDays : 0;
+  };
+
+  const isKioskoOnline = (lastSeenString?: string) => {
+    if (!lastSeenString) return false;
+    const lastSeenDate = new Date(lastSeenString);
+    const now = new Date();
+    const diffMinutes = (now.getTime() - lastSeenDate.getTime()) / (1000 * 60);
+    return diffMinutes <= 10;
   };
 
   if (loading) {
@@ -329,7 +341,7 @@ export default function DashboardPage() {
           <nav className="space-y-1">
             {(userRole === 'Administrador' ? [
               { id: 'overview', label: '📊 Perfil & Empresa' },
-              { id: 'devices', label: '🖥️ Equipos RFPOS' },
+              { id: 'devices', label: '🖥️ Tablets Lenovo & Telemetría' },
               { id: 'woo', label: '🛍️ WooCommerce' },
               { id: 'billing', label: '💳 Facturación PayPal' },
               { id: 'users', label: '👥 Subusuarios & Roles' },
@@ -414,68 +426,82 @@ export default function DashboardPage() {
           {activeTab === 'devices' && userRole === 'Administrador' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Gestión de Equipos RFPOS (Mensualidades)</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Tablets Lenovo & Telemetría (Mini-MDM)</h2>
                 <span className="px-3 py-1 bg-black text-white text-xs font-bold rounded-xl">
-                  Total Equipos: {devices.length}
+                  Total Tablets: {devices.length}
                 </span>
               </div>
 
-              {/* Formulario Detallado de Equipos */}
               <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nuevo Equipo RFPOS</h3>
+                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nueva Tablet Lenovo</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Nombre / Ubicación</label>
                     <input type="text" required placeholder="Ej. Kiosco Caja Principal" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Equipo</label>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Tablet</label>
                     <select value={deviceModel} onChange={(e) => setDeviceModel(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
-                      <option value="Kiosqly Pro V2">Kiosqly Pro V2 (Self-Service)</option>
-                      <option value="Kiosqly Tabletop RFPOS">Kiosqly Tabletop RFPOS</option>
-                      <option value="Kiosqly Wallmount Mini">Kiosqly Wallmount Mini</option>
+                      <option value="Lenovo Tab M11 (Kiosqly RFPOS)">Lenovo Tab M11</option>
+                      <option value="Lenovo Tab M10 Plus">Lenovo Tab M10 Plus</option>
+                      <option value="Lenovo Tab P12 Pro">Lenovo Tab P12 Pro</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">ID / Serial del Equipo</label>
-                    <input type="text" placeholder="Ej. SN-98421" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Sucursal</label>
+                    <input type="text" placeholder="Ej. Vía España" value={branchName} onChange={(e) => setBranchName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Serial / ID de la Tablet</label>
+                    <input type="text" placeholder="Ej. SN-LENOVO-984" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Fecha de Alta</label>
                     <input type="date" required value={deviceInstallDate} onChange={(e) => setDeviceInstallDate(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Dirección IP Asignada</label>
-                    <input type="text" placeholder="192.168.1.50" value={deviceIp} onChange={(e) => setDeviceIp(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
                   <div className="flex items-end">
-                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Registrar Equipo</button>
+                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Registrar Tablet</button>
                   </div>
                 </div>
               </form>
 
-              {/* Listado con Contador de Días de Pago */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Equipos Licenciados y Ciclo de Pago</h3>
+                <h3 className="font-bold text-gray-900 text-lg">Estado de Salud y Ciclo de Facturación</h3>
                 <div className="divide-y divide-gray-100">
                   {devices.map((device) => {
-                    const daysLeft = calculateDaysRemaining(device.installation_date || device.created_at);
+                    const daysLeft = calculateDaysRemaining(device.installation_date || device.created_at || new Date().toISOString());
+                    const online = isKioskoOnline(device.last_seen);
+                    const battery = device.battery_level !== undefined ? device.battery_level : 100;
+                    const charging = device.charging_status || 'Conectado';
+                    const wifi = device.wifi_signal || 'Excelente';
+                    const lowBattery = battery < 20 && charging !== 'Conectado';
+
                     return (
-                      <div key={device.id} className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 text-sm">
-                        <div className="space-y-0.5">
-                          <p className="font-bold text-gray-900">{device.name} <span className="text-xs font-normal text-gray-500">({device.model})</span></p>
-                          <p className="text-xs text-gray-500">Serial: <span className="font-mono text-gray-700">{device.serial_number || 'N/A'}</span> | IP: {device.ip || '192.168.1.50'} | Alta: {device.installation_date?.split('T')[0]}</p>
+                      <div key={device.id} className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-sm">
+                        <div className="space-y-1">
+                          <p className="font-bold text-gray-900 text-base">
+                            {device.name} <span className="text-xs font-normal text-gray-500">({device.model || 'Lenovo Tab'})</span>
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Sucursal: <span className="font-semibold text-gray-700">{device.branch_name || 'Principal'}</span> | Serial: <span className="font-mono text-gray-700">{device.serial_number || 'N/A'}</span>
+                          </p>
+                          <div className="flex items-center space-x-4 text-xs pt-1 text-gray-600">
+                            <span>🔋 Batería: <strong>{battery}%</strong> ({charging})</span>
+                            <span>📶 WiFi: <strong>{wifi}</strong></span>
+                            <span>⏱️ Pago en: <strong className="text-amber-700">{daysLeft} días</strong></span>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-3">
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            ⏱️ Próximo pago mensual en: <strong>{daysLeft} días</strong>
+                        <div>
+                          <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
+                            lowBattery ? 'bg-red-100 text-red-700 animate-pulse' : online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {lowBattery ? '⚠️ Batería Baja / Descargando' : online ? '🟢 En Línea' : '🔴 Desconectado'}
                           </span>
-                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">● {device.status}</span>
                         </div>
                       </div>
                     );
                   })}
-                  {devices.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay equipos dados de alta todavía.</p>}
+                  {devices.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay tablets Lenovo registradas todavía.</p>}
                 </div>
               </div>
             </div>
@@ -513,11 +539,11 @@ export default function DashboardPage() {
                   <div>
                     <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">Suscripción Automatizada</span>
                     <h3 className="font-extrabold text-gray-900 text-xl mt-2">Plan Kiosqly RFPOS por Equipos</h3>
-                    <p className="text-xs text-gray-500 mt-1">El cobro mensual se ajusta dinámicamente según la cantidad de equipos activos registrados.</p>
+                    <p className="text-xs text-gray-500 mt-1">El cobro mensual se ajusta dinámicamente según la cantidad de tablets activas registradas.</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-400 uppercase font-semibold">Equipos Licenciados</p>
-                    <p className="text-2xl font-black text-gray-900">{devices.length || 1} <span className="text-sm font-normal text-gray-500">equipos</span></p>
+                    <p className="text-xs text-gray-400 uppercase font-semibold">Tablets Licenciadas</p>
+                    <p className="text-2xl font-black text-gray-900">{devices.length || 1} <span className="text-sm font-normal text-gray-500">tablets</span></p>
                   </div>
                 </div>
 
@@ -576,7 +602,7 @@ export default function DashboardPage() {
                 <h3 className="font-bold text-gray-900 text-md">Crear Nuevo Ticket</h3>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Asunto</label>
-                  <input type="text" required value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} placeholder="Ej. Solicitud de configuración de impresora térmica" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <input type="text" required value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} placeholder="Ej. Solicitud de configuración de tablet" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Detalle del Requerimiento</label>
@@ -609,15 +635,15 @@ export default function DashboardPage() {
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl mx-auto font-bold shadow-inner">💬</div>
               <div className="space-y-2">
                 <h3 className="font-bold text-gray-900 text-xl">Canal de Asistencia Directa</h3>
-                <p className="text-sm text-gray-500">Conéctate al instante con nuestro equipo de ingeniería y soporte técnico especializado para resolver cualquier consulta sobre tus equipos RFPOS sin necesidad de recordar números telefónicos.</p>
+                <p className="text-sm text-gray-600">Comunícate de forma inmediata con el equipo de soporte técnico de Kiosqly en Panamá para asistencia con tus tablets y software RFPOS.</p>
               </div>
-              <a 
-                href="https://wa.me/50763110603?text=Hola,%20necesito%20asistencia%20con%20mi%20portal%20RFPOS." 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="inline-block rounded-2xl bg-green-600 text-white font-bold px-8 py-4 text-sm hover:bg-green-700 shadow-lg shadow-green-600/20 transition transform active:scale-95"
+              <a
+                href="https://wa.me/50760000000?text=Hola%20Kiosqly,%20necesito%20soporte%20técnico%20con%20mis%20equipos%20RFPOS."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block w-full rounded-2xl bg-green-600 text-white font-bold py-3.5 text-sm hover:bg-green-700 shadow-md shadow-green-900/10 transition"
               >
-                Abrir Chat de Soporte Técnico
+                Abrir Chat de WhatsApp ↗
               </a>
             </div>
           )}
