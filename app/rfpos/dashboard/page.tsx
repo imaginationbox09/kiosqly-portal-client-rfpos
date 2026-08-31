@@ -1,11 +1,8 @@
-Aquí tienes el código completo con la **Integración OAuth Real de WooCommerce** (compatible con el protocolo oficial `/wc-auth/v1/authorize` de tiendas WordPress/WooCommerce auto-hospedadas), junto con la opción de ingreso manual de claves API (`Consumer Key` y `Consumer Secret`) para máxima flexibilidad en restaurantes:
-
-```tsx
 'use client';
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -44,6 +41,18 @@ interface Ticket {
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500 font-medium">Cargando portal Kiosqly RFPOS...</p>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -782,5 +791,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-```
