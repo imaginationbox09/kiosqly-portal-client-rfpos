@@ -61,7 +61,7 @@ export default function DashboardPage() {
   // Equipos RFPOS Detallados y Telemetría
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceName, setDeviceName] = useState('');
-  const [deviceModel, setDeviceModel] = useState('Lenovo Tab M11 (Kiosqly RFPOS)');
+  const [deviceModel, setDeviceModel] = useState('RFPOS ORG001');
   const [deviceSerial, setDeviceSerial] = useState('');
   const [deviceIp, setDeviceIp] = useState('192.168.1.50');
   const [deviceInstallDate, setDeviceInstallDate] = useState(new Date().toISOString().split('T')[0]);
@@ -216,7 +216,7 @@ export default function DashboardPage() {
         user_id: userId, 
         name: deviceName, 
         model: deviceModel, 
-        serial_number: deviceSerial || `SN-TAB-${Math.floor(Math.random() * 89999 + 10000)}`,
+        serial_number: deviceSerial || `SN-ORG-${Math.floor(Math.random() * 89999 + 10000)}`,
         installation_date: deviceInstallDate,
         status: 'En línea', 
         ip: deviceIp || '192.168.1.50',
@@ -433,7 +433,7 @@ export default function DashboardPage() {
               </div>
 
               <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nueva Estación / Tablet RFPOS</h3>
+                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nueva Estación / Terminal RFPOS</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Nombre / Ubicación</label>
@@ -442,9 +442,7 @@ export default function DashboardPage() {
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Estación</label>
                     <select value={deviceModel} onChange={(e) => setDeviceModel(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
-                      <option value="Lenovo Tab M11 (Kiosqly RFPOS)">Lenovo Tab M11</option>
-                      <option value="Lenovo Tab M10 Plus">Lenovo Tab M10 Plus</option>
-                      <option value="Lenovo Tab P12 Pro">Lenovo Tab P12 Pro</option>
+                      <option value="RFPOS ORG001">RFPOS ORG001</option>
                     </select>
                   </div>
                   <div>
@@ -453,7 +451,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Serial / ID del Dispositivo</label>
-                    <input type="text" placeholder="Ej. SN-LENOVO-984" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                    <input type="text" placeholder="Ej. SN-ORG-001" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Fecha de Alta</label>
@@ -480,7 +478,7 @@ export default function DashboardPage() {
                       <div key={device.id} className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-sm">
                         <div className="space-y-1">
                           <p className="font-bold text-gray-900 text-base">
-                            {device.name} <span className="text-xs font-normal text-gray-500">({device.model || 'RFPOS Station'})</span>
+                            {device.name} <span className="text-xs font-normal text-gray-500">({device.model || 'RFPOS ORG001'})</span>
                           </p>
                           <p className="text-xs text-gray-500">
                             Sucursal: <span className="font-semibold text-gray-700">{device.branch_name || 'Principal'}</span> | Serial: <span className="font-mono text-gray-700">{device.serial_number || 'N/A'}</span>
