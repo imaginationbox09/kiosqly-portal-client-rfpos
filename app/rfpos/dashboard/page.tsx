@@ -13,8 +13,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 interface Device {
   id: string;
   name: string;
+  model: string;
+  serial_number: string;
+  installation_date: string;
   status: string;
-  ip?: string;
+  ip: string;
 }
 
 interface SubUser {
@@ -45,7 +48,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');
 
-  // Empresa (Campos completos)
+  // Empresa
   const [companyName, setCompanyName] = useState('');
   const [rucNit, setRucNit] = useState('');
   const [address, setAddress] = useState('');
@@ -55,16 +58,21 @@ export default function DashboardPage() {
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Equipos
+  // Equipos RFPOS Detallados
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceName, setDeviceName] = useState('');
+  const [deviceModel, setDeviceModel] = useState('Kiosqly Pro V2');
+  const [deviceSerial, setDeviceSerial] = useState('');
+  const [deviceIp, setDeviceIp] = useState('192.168.1.50');
+  const [deviceInstallDate, setDeviceInstallDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Subusuarios
+  // Subusuarios y Enlace de Invitación
   const [subUsers, setSubUsers] = useState<SubUser[]>([]);
   const [newSubEmail, setNewSubEmail] = useState('');
   const [newSubRole, setNewSubRole] = useState<'Administrador' | 'Colaborador'>('Colaborador');
+  const [inviteLinkCopied, setInviteLinkCopied] = useState('');
 
-  // Tickets
+  // Tickets con envío a info@kiosqly.com
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketSubject, setTicketSubject] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
@@ -105,7 +113,7 @@ export default function DashboardPage() {
     initSession();
   }, [router]);
 
-  // PayPal SDK Loader Estético
+  // PayPal SDK Loader
   useEffect(() => {
     if (activeTab === 'billing' && userRole === 'Administrador') {
       const scriptId = 'paypal-sdk-script';
@@ -127,12 +135,7 @@ export default function DashboardPage() {
     if (container && window.paypal) {
       container.innerHTML = '';
       window.paypal.Buttons({
-        style: {
-          shape: 'rect',
-          color: 'gold',
-          layout: 'vertical',
-          label: 'subscribe'
-        },
+        style: { shape: 'rect', color: 'gold', layout: 'vertical', label: 'subscribe' },
         createSubscription: function(data: any, actions: any) {
           return actions.subscription.create({
             plan_id: 'P-5XX972822Y4491137NKJSEEY',
@@ -166,11 +169,6 @@ export default function DashboardPage() {
         website: 'https://mitienda.com'
       }]);
       setCompanyName('Mi Restaurante S.A.');
-      setRucNit('1234567-1-123456');
-      setAddress('Calle Principal');
-      setCity('Panamá');
-      setContactPhone('+507 6000-0000');
-      setWebsite('https://mitienda.com');
     }
   }
 
@@ -195,21 +193,12 @@ export default function DashboardPage() {
     setErrorMessage('');
     const { error } = await supabase
       .from('companies')
-      .update({ 
-        company_name: companyName, 
-        ruc_nit: rucNit, 
-        address, 
-        city, 
-        contact_phone: contactPhone, 
-        website, 
-        updated_at: new Date() 
-      })
+      .update({ company_name: companyName, ruc_nit: rucNit, address, city, contact_phone: contactPhone, website, updated_at: new Date() })
       .eq('user_id', userId);
 
-    if (error) {
-      setErrorMessage('Error al guardar: ' + error.message);
-    } else {
-      setSavedMessage('¡Información de empresa actualizada con éxito!');
+    if (error) setErrorMessage('Error al guardar: ' + error.message);
+    else {
+      setSavedMessage('¡Información actualizada con éxito!');
       setTimeout(() => setSavedMessage(''), 4000);
     }
   };
@@ -221,14 +210,22 @@ export default function DashboardPage() {
 
     const { data, error } = await supabase
       .from('kiosks')
-      .insert([{ user_id: userId, name: deviceName, status: 'En línea', ip: '192.168.1.' + Math.floor(Math.random() * 200 + 10) }])
+      .insert([{ 
+        user_id: userId, 
+        name: deviceName, 
+        model: deviceModel, 
+        serial_number: deviceSerial || `SN-${Math.floor(Math.random() * 89999 + 10000)}`,
+        installation_date: deviceInstallDate,
+        status: 'En línea', 
+        ip: deviceIp || '192.168.1.50' 
+      }])
       .select();
 
-    if (error) {
-      setErrorMessage('No se pudo agregar el equipo: ' + error.message);
-    } else if (data) {
+    if (error) setErrorMessage('Error al agregar equipo: ' + error.message);
+    else if (data) {
       setDevices([...devices, data[0]]);
       setDeviceName('');
+      setDeviceSerial('');
     }
   };
 
@@ -242,10 +239,11 @@ export default function DashboardPage() {
       .insert([{ user_id: userId, email: newSubEmail, role: newSubRole }])
       .select();
 
-    if (error) {
-      setErrorMessage('No se pudo crear el subusuario: ' + error.message);
-    } else if (data) {
+    if (error) setErrorMessage('Error al crear subusuario: ' + error.message);
+    else if (data) {
       setSubUsers([...subUsers, data[0]]);
+      const inviteUrl = `${window.location.origin}/rfpos`;
+      setInviteLinkCopied(`Invitación creada para ${newSubEmail}. Enlace de acceso: ${inviteUrl}`);
       setNewSubEmail('');
     }
   };
@@ -255,14 +253,35 @@ export default function DashboardPage() {
     if (!userId || !ticketSubject.trim() || !ticketMessage.trim()) return;
     setErrorMessage('');
 
+    // 1. Guardar en Supabase
     const { data, error } = await supabase
       .from('tickets')
       .insert([{ user_id: userId, subject: ticketSubject, message: ticketMessage, status: 'Abierto' }])
       .select();
 
     if (error) {
-      setErrorMessage('No se pudo crear el ticket: ' + error.message);
-    } else if (data) {
+      setErrorMessage('Error al crear ticket: ' + error.message);
+      return;
+    }
+
+    // 2. Enviar copia por correo a info@kiosqly.com mediante FormSubmit
+    try {
+      await fetch('https://formsubmit.co/ajax/info@kiosqly.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          _subject: `Nuevo Ticket RFPOS: ${ticketSubject}`,
+          Usuario: userEmail,
+          Empresa: companyName,
+          Mensaje: ticketMessage,
+          Fecha: new Date().toLocaleString()
+        })
+      });
+    } catch (err) {
+      console.error('Error enviando notificación al correo de soporte', err);
+    }
+
+    if (data) {
       setTickets([data[0], ...tickets]);
       setTicketSubject('');
       setTicketMessage('');
@@ -274,6 +293,17 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/rfpos');
+  };
+
+  // Calcular días restantes de suscripción mensual (basado en instalación o ciclo de 30 días)
+  const calculateDaysRemaining = (installDate: string) => {
+    const install = new Date(installDate);
+    const nextBilling = new Date(install);
+    nextBilling.setDate(nextBilling.getDate() + 30);
+    const today = new Date();
+    const diffTime = nextBilling.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
   };
 
   if (loading) {
@@ -361,7 +391,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Dirección Física</label>
-                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ej. Vía Argentina, Edificio Plaza" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ej. Vía Argentina" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Ciudad / Provincia</label>
@@ -384,29 +414,67 @@ export default function DashboardPage() {
           {activeTab === 'devices' && userRole === 'Administrador' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Gestión de Equipos RFPOS</h2>
-                <span className="px-3 py-1 bg-gray-100 text-gray-800 text-xs font-bold rounded-xl">
-                  Equipos Activos: {devices.length}
+                <h2 className="text-2xl font-bold text-gray-900">Gestión de Equipos RFPOS (Mensualidades)</h2>
+                <span className="px-3 py-1 bg-black text-white text-xs font-bold rounded-xl">
+                  Total Equipos: {devices.length}
                 </span>
               </div>
 
-              <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex gap-4">
-                <input type="text" required placeholder="Nombre del nuevo equipo (ej. Kiosco Caja Principal)" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="flex-1 rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                <button type="submit" className="rounded-xl bg-black px-6 py-2 text-white font-medium text-sm">Dar de Alta</button>
+              {/* Formulario Detallado de Equipos */}
+              <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nuevo Equipo RFPOS</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Nombre / Ubicación</label>
+                    <input type="text" required placeholder="Ej. Kiosco Caja Principal" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Equipo</label>
+                    <select value={deviceModel} onChange={(e) => setDeviceModel(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
+                      <option value="Kiosqly Pro V2">Kiosqly Pro V2 (Self-Service)</option>
+                      <option value="Kiosqly Tabletop RFPOS">Kiosqly Tabletop RFPOS</option>
+                      <option value="Kiosqly Wallmount Mini">Kiosqly Wallmount Mini</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">ID / Serial del Equipo</label>
+                    <input type="text" placeholder="Ej. SN-98421" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Fecha de Alta</label>
+                    <input type="date" required value={deviceInstallDate} onChange={(e) => setDeviceInstallDate(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Dirección IP Asignada</label>
+                    <input type="text" placeholder="192.168.1.50" value={deviceIp} onChange={(e) => setDeviceIp(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  </div>
+                  <div className="flex items-end">
+                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Registrar Equipo</button>
+                  </div>
+                </div>
               </form>
 
+              {/* Listado con Contador de Días de Pago */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Equipos Registrados</h3>
+                <h3 className="font-bold text-gray-900 text-lg">Equipos Licenciados y Ciclo de Pago</h3>
                 <div className="divide-y divide-gray-100">
-                  {devices.map((device) => (
-                    <div key={device.id} className="py-3 flex justify-between items-center text-sm">
-                      <div>
-                        <p className="font-medium text-gray-900">{device.name}</p>
-                        <p className="text-xs text-gray-500">IP: {device.ip || '192.168.1.50'}</p>
+                  {devices.map((device) => {
+                    const daysLeft = calculateDaysRemaining(device.installation_date || device.created_at);
+                    return (
+                      <div key={device.id} className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 text-sm">
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-gray-900">{device.name} <span className="text-xs font-normal text-gray-500">({device.model})</span></p>
+                          <p className="text-xs text-gray-500">Serial: <span className="font-mono text-gray-700">{device.serial_number || 'N/A'}</span> | IP: {device.ip || '192.168.1.50'} | Alta: {device.installation_date?.split('T')[0]}</p>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            ⏱️ Próximo pago mensual en: <strong>{daysLeft} días</strong>
+                          </span>
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">● {device.status}</span>
+                        </div>
                       </div>
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">● {device.status}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {devices.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay equipos dados de alta todavía.</p>}
                 </div>
               </div>
@@ -417,21 +485,22 @@ export default function DashboardPage() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-900">Sincronización WooCommerce</h2>
-                <a 
-                  href="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%25252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
+                <span className="text-xs bg-purple-100 text-purple-700 font-bold px-3 py-1 rounded-full">Integración Segura OAuth</span>
+              </div>
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 text-center space-y-6 max-w-xl mx-auto">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 text-2xl mx-auto font-bold shadow-inner">W</div>
+                <div className="space-y-2">
+                  <h3 className="font-bold text-gray-900 text-lg">Conectar Tienda WooCommerce / WordPress.com</h3>
+                  <p className="text-xs text-gray-500">Autoriza el acceso seguro mediante la plataforma oficial para sincronizar menús, productos y órdenes en tiempo real con tus equipos RFPOS.</p>
+                </div>
+                <a
+                  href="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-purple-700 font-semibold hover:underline"
+                  className="inline-block w-full rounded-2xl bg-[#96588a] text-white font-bold py-3.5 text-sm hover:bg-[#7b4671] shadow-md shadow-purple-900/10 transition"
                 >
-                  Abrir login en pestaña completa ↗
+                  Conectar con WooCommerce / WordPress.com ↗
                 </a>
-              </div>
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-[600px] flex flex-col">
-                <iframe
-                  src="https://wordpress.com/log-in/es?client_id=50916&redirect_to=https%3A%2F%2Fpublic-api.wordpress.com%2Foauth2%2Fauthorize%2F%3Fresponse_type%3Dcode%26client_id%3D50916%26state%3D0f66f6b1e0db902c7d2ff833056b9f2acefff282fb94ee04bdf884e9f68277ee%26redirect_uri%3Dhttps%253A%252F%252Fwoocommerce.com%252Fwc-api%252Fwpcom-signin%253Fnext%253D%25252Fes%25252F%2526original_referrer%253Dhttps%25253A%252F%25252Fwww.google.com%25252F%26blog_id%3D0%26wpcom_connect%3D1%26wccom-from%26calypso_env%3Dproduction%26locale%3Des%26from-calypso%3D1"
-                  title="WooCommerce WordPress Login"
-                  className="w-full flex-1 rounded-xl border border-gray-200"
-                />
               </div>
             </div>
           )}
@@ -443,8 +512,8 @@ export default function DashboardPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-6 gap-4">
                   <div>
                     <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">Suscripción Automatizada</span>
-                    <h3 className="font-extrabold text-gray-900 text-xl mt-2">Kiosqly RFPOS Plan por Equipos</h3>
-                    <p className="text-xs text-gray-500 mt-1">El monto mensual se calcula automáticamente según tus equipos activos en la plataforma.</p>
+                    <h3 className="font-extrabold text-gray-900 text-xl mt-2">Plan Kiosqly RFPOS por Equipos</h3>
+                    <p className="text-xs text-gray-500 mt-1">El cobro mensual se ajusta dinámicamente según la cantidad de equipos activos registrados.</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400 uppercase font-semibold">Equipos Licenciados</p>
@@ -453,7 +522,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-inner flex flex-col items-center justify-center space-y-4">
-                  <p className="text-xs text-gray-600 font-medium text-center">Completa tu pago o activa tu renovación automática segura con PayPal:</p>
+                  <p className="text-xs text-gray-600 font-medium text-center">Gestiona o efectúa tu suscripción mensual segura a través de PayPal:</p>
                   <div id="paypal-button-container-P-5XX972822Y4491137NKJSEEY" className="w-full flex justify-center"></div>
                 </div>
               </div>
@@ -463,19 +532,28 @@ export default function DashboardPage() {
           {activeTab === 'users' && userRole === 'Administrador' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900">Gestión de Subusuarios y Roles</h2>
+              
+              {inviteLinkCopied && (
+                <div className="p-4 bg-purple-50 border border-purple-200 text-purple-800 text-sm rounded-xl space-y-1">
+                  <p className="font-bold">✅ ¡Subusuario creado exitosamente!</p>
+                  <p className="text-xs font-mono">{inviteLinkCopied}</p>
+                </div>
+              )}
+
               <form onSubmit={handleCreateSubUser} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Invitar o Agregar Nuevo Usuario</h3>
+                <h3 className="font-bold text-gray-900 text-md">Agregar y Enviar Invitación</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <input type="email" required placeholder="empleado@restaurante.com" value={newSubEmail} onChange={(e) => setNewSubEmail(e.target.value)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                   <select value={newSubRole} onChange={(e) => setNewSubRole(e.target.value as any)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
                     <option value="Colaborador">Colaborador (Solo Tienda)</option>
                     <option value="Administrador">Administrador (Acceso Total)</option>
                   </select>
-                  <button type="submit" className="rounded-xl bg-black px-6 py-2 text-white font-medium text-sm hover:bg-gray-800 transition">Crear Subusuario</button>
+                  <button type="submit" className="rounded-xl bg-black px-6 py-2 text-white font-medium text-sm hover:bg-gray-800 transition">Generar e Invitar</button>
                 </div>
               </form>
+
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Usuarios Autorizados</h3>
+                <h3 className="font-bold text-gray-900 text-lg">Usuarios Autorizados en el Sistema</h3>
                 <div className="divide-y divide-gray-100">
                   {subUsers.map((u) => (
                     <div key={u.id} className="py-3 flex justify-between items-center text-sm">
@@ -492,19 +570,19 @@ export default function DashboardPage() {
           {activeTab === 'tickets' && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900">Soporte Técnico & Récord de Tickets</h2>
-              {ticketSuccess && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">¡Ticket creado y registrado exitosamente!</div>}
+              {ticketSuccess && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">¡Ticket enviado a soporte técnico (info@kiosqly.com) y registrado exitosamente!</div>}
               
               <form onSubmit={handleCreateTicket} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
                 <h3 className="font-bold text-gray-900 text-md">Crear Nuevo Ticket</h3>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Asunto</label>
-                  <input type="text" required value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} placeholder="Ej. Duda con sincronización de inventario" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <input type="text" required value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} placeholder="Ej. Solicitud de configuración de impresora térmica" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Detalle del Requerimiento</label>
-                  <textarea required rows={3} value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} placeholder="Describe detalladamente tu solicitud..." className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <textarea required rows={3} value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} placeholder="Describe detalladamente el requerimiento..." className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 </div>
-                <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Enviar y Registrar Ticket</button>
+                <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Enviar a info@kiosqly.com y Registrar</button>
               </form>
 
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
@@ -531,7 +609,7 @@ export default function DashboardPage() {
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 text-3xl mx-auto font-bold shadow-inner">💬</div>
               <div className="space-y-2">
                 <h3 className="font-bold text-gray-900 text-xl">Canal de Asistencia Directa</h3>
-                <p className="text-sm text-gray-500">Conéctate al instante con nuestro equipo de ingeniería y soporte técnico especializado para resolver cualquier consulta sobre tus equipos RFPOS.</p>
+                <p className="text-sm text-gray-500">Conéctate al instante con nuestro equipo de ingeniería y soporte técnico especializado para resolver cualquier consulta sobre tus equipos RFPOS sin necesidad de recordar números telefónicos.</p>
               </div>
               <a 
                 href="https://wa.me/50763110603?text=Hola,%20necesito%20asistencia%20con%20mi%20portal%20RFPOS." 
