@@ -14,8 +14,12 @@ export async function POST(request: Request) {
       body = await request.json();
     } else {
       const text = await request.text();
-      const params = new URLSearchParams(text);
-      body = Object.fromEntries(params.entries());
+      try {
+        body = JSON.parse(text);
+      } catch {
+        const params = new URLSearchParams(text);
+        body = Object.fromEntries(params.entries());
+      }
     }
 
     const url = new URL(request.url);
@@ -24,7 +28,7 @@ export async function POST(request: Request) {
     const consumerSecret = body.consumer_secret;
 
     if (!consumerKey || !consumerSecret) {
-      console.error('Faltan credenciales en el callback:', body);
+      console.error('Faltan las credenciales de WooCommerce en el cuerpo:', body);
       return NextResponse.json({ error: 'Faltan las credenciales de WooCommerce' }, { status: 400 });
     }
 
@@ -33,8 +37,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Falta el user_id' }, { status: 400 });
     }
 
-    // 1. Verificar si la empresa ya existe para este usuario
-    const { data: existingCompany } = await supabase
+    // Verificar si la empresa ya existe para este usuario
+    const { data: existing } = await supabase
       .from('companies')
       .select('id')
       .eq('user_id', userId)
@@ -42,43 +46,43 @@ export async function POST(request: Request) {
 
     let dbError = null;
 
-    if (existingCompany) {
-      // 2A. Si existe, actualizamos las llaves
+    if (existing) {
+      // Actualizar registro existente
       const { error } = await supabase
         .from('companies')
         .update({
           consumer_key: consumerKey,
           consumer_secret: consumerSecret,
           wc_connected: true,
-          updated_at: new Date()
+          updated_at: new Date().toISOString()
         })
         .eq('user_id', userId);
       dbError = error;
     } else {
-      // 2B. Si no existe, creamos el registro de la empresa con las llaves
+      // Crear nuevo registro si no existía
       const { error } = await supabase
         .from('companies')
-        .insert([{
+        .insert({
           user_id: userId,
-          company_name: 'Mi Restaurante S.A.',
           consumer_key: consumerKey,
           consumer_secret: consumerSecret,
           wc_connected: true,
-          updated_at: new Date()
-        }]);
+          company_name: 'Mi Empresa',
+          updated_at: new Date().toISOString()
+        });
       dbError = error;
     }
 
     if (dbError) {
-      console.error('Error de Supabase al guardar llaves:', dbError.message);
+      console.error('Error al guardar en Supabase:', dbError.message);
       return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
-    // Respuesta exitosa obligatoria para que WooCommerce complete el flujo
+    // Respuesta exitosa obligatoria para WooCommerce
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err: any) {
-    console.error('Error crítico en el callback de WooCommerce:', err);
-    return NextResponse.json({ error: err.message || 'Error interno del servidor' }, { status: 500 });
+    console.error('Error crítico en el callback:', err);
+    return NextResponse.json({ error: err.message || 'Error interno' }, { status: 500 });
   }
 }
 
