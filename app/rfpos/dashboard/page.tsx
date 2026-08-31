@@ -246,6 +246,7 @@ function DashboardContent() {
       setErrorMessage('No se encontró el ID del usuario actual. Por favor recarga la página.');
       return;
     }
+
     let cleanUrl = wcStoreUrl.trim().replace(/\/$/, '');
     if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
       cleanUrl = 'https://' + cleanUrl;
@@ -254,7 +255,9 @@ function DashboardContent() {
     const appName = encodeURIComponent('Kiosqly RFPOS');
     const scope = 'read_write';
     const returnUrl = encodeURIComponent(`${window.location.origin}${window.location.pathname}?tab=woo&success=true`);
-    const callbackUrl = encodeURIComponent(`${window.location.origin}/api/woocommerce/callback?user_id=${userId}`);
+    
+    // ¡Solución! Pasamos el userId en la ruta para que WooCommerce no lo borre en el POST
+    const callbackUrl = encodeURIComponent(`${window.location.origin}/api/woocommerce/callback/${userId}`);
 
     const authUrl = `${cleanUrl}/wc-auth/v1/authorize?app_name=${appName}&scope=${scope}&return_url=${returnUrl}&callback_url=${callbackUrl}`;
     window.location.href = authUrl;
