@@ -7,12 +7,14 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(
   request: Request,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> | { userId: string } }
 ) {
   try {
-    const { userId } = params;
-    const body = await request.json();
+    // Compatible con Next.js 14 y 15+ (donde params puede ser una promesa)
+    const resolvedParams = await Promise.resolve(params);
+    const userId = resolvedParams.userId;
 
+    const body = await request.json();
     const { consumer_key, consumer_secret } = body;
 
     if (!consumer_key || !consumer_secret) {

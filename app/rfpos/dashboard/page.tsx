@@ -1,243 +1,70 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
-import { useEffect, useState, FormEvent, Suspense } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { useRouter, useSearchParams } from 'next/navigation';
 
-const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL as string) || '';
-const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-interface Device {
-  id: string;
-  name: string;
-  model: string;
-  serial_number: string;
-  installation_date: string;
-  status: string;
-  ip: string;
-  battery_level?: number;
-  wifi_signal?: string;
-  charging_status?: string;
-  last_seen?: string;
-  branch_name?: string;
-  created_at?: string;
-}
-
-interface SubUser {
-  id: string;
-  email: string;
-  role: 'Administrador' | 'Colaborador';
-}
-
-interface Ticket {
-  id: string;
-  subject: string;
-  message: string;
-  status: string;
-  created_at: string;
-}
-
-export default function DashboardPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-500 font-medium">Cargando portal Kiosqly RFPOS...</p>
-      </div>
-    }>
-      <DashboardContent />
-    </Suspense>
-  );
-}
-
-function DashboardContent() {
-  const router = useRouter();
+export default function RFPOSDashboard() {
   const searchParams = useSearchParams();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>('overview');
-  const [userRole, setUserRole] = useState<'Administrador' | 'Colaborador'>('Administrador');
-
-  // Empresa
-  const [companyName, setCompanyName] = useState('');
-  const [rucNit, setRucNit] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
-  const [website, setWebsite] = useState('');
-  const [savedMessage, setSavedMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-
-  // Equipos RFPOS Detallados y Telemetría
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [deviceName, setDeviceName] = useState('');
-  const [deviceModel, setDeviceModel] = useState('RFPOS ORG001');
-  const [deviceSerial, setDeviceSerial] = useState('');
-  const [deviceIp, setDeviceIp] = useState('192.168.1.50');
-  const [deviceInstallDate, setDeviceInstallDate] = useState(new Date().toISOString().split('T')[0]);
-  const [branchName, setBranchName] = useState('Principal');
-
-  // WooCommerce Real OAuth / Keys State
-  const [wcStoreUrl, setWcStoreUrl] = useState('');
-  const [wcConsumerKey, setWcConsumerKey] = useState('');
-  const [wcConsumerSecret, setWcConsumerSecret] = useState('');
-  const [wcConnected, setWcConnected] = useState(false);
-  const [wcSuccessMsg, setWcSuccessMsg] = useState('');
-
-  // Subusuarios y Enlace de Invitación
-  const [subUsers, setSubUsers] = useState<SubUser[]>([]);
-  const [newSubEmail, setNewSubEmail] = useState('');
-  const [newSubRole, setNewSubRole] = useState<'Administrador' | 'Colaborador'>('Colaborador');
-  const [inviteLinkCopied, setInviteLinkCopied] = useState('');
-
-  // Tickets con envío a info@kiosqly.com
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [ticketSubject, setTicketSubject] = useState('');
-  const [ticketMessage, setTicketMessage] = useState('');
-  const [ticketSuccess, setTicketSuccess] = useState(false);
+  const router = useRouter();
+  
+  const [activeTab, setActiveTab] = useState('overview');
+  const [userId, setUserId] = useState<string>('');
+  const [companyName, setCompanyName] = useState<string>('Kiosqly RFPOS');
+  const [wcStoreUrl, setWcStoreUrl] = useState<string>('');
+  const [wcConnected, setWcConnected] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   useEffect(() => {
-    async function initSession() {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error || !session) {
-        router.push('/rfpos');
-      } else {
-        const currentUserId = session.user.id;
-        const currentEmail = session.user.email || '';
-        setUserEmail(currentEmail);
-        setUserId(currentUserId);
-
-        const tabParam = searchParams.get('tab');
-        const successParam = searchParams.get('success');
-        if (tabParam) setActiveTab(tabParam);
-        if (successParam === 'true') {
-          setWcConnected(true);
-          setWcSuccessMsg('¡Tienda WooCommerce conectada y sincronizada exitosamente!');
-        }
-
-        const { data: subData } = await supabase
-          .from('sub_users')
-          .select('role')
-          .eq('email', currentEmail)
-          .single();
-
-        if (subData && subData.role === 'Colaborador') {
-          setUserRole('Colaborador');
-          if (!tabParam) setActiveTab('woo');
-        } else {
-          setUserRole('Administrador');
-          if (!tabParam) setActiveTab('overview');
-        }
-
-        await fetchCompanyData(currentUserId);
-        await fetchDevices(currentUserId);
-        await fetchSubUsers(currentUserId);
-        await fetchTickets(currentUserId);
-      }
-      setLoading(false);
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
     }
-    initSession();
-  }, [router, searchParams]);
+    const successParam = searchParams.get('success');
+    if (successParam === 'true') {
+      setSuccessMessage('¡WooCommerce conectado y credenciales guardadas exitosamente!');
+    }
 
-  // PayPal SDK Loader
-  useEffect(() => {
-    if (activeTab === 'billing' && userRole === 'Administrador') {
-      const scriptId = 'paypal-sdk-script';
-      if (!document.getElementById(scriptId)) {
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://www.paypal.com/sdk/js?client-id=BAA0zPEyaslOX6mT5nondXBuZ61iWGULglR0ACvU8m8gcs99dAEzpIou4bDCIEZ2KpI8lgXVPJI2X1W5fs&vault=true&intent=subscription';
-        script.async = true;
-        script.onload = () => renderPayPalButtons();
-        document.body.appendChild(script);
-      } else {
-        renderPayPalButtons();
+    async function loadUserData() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const currentUserId = session.user.id;
+          setUserId(currentUserId);
+
+          const { data: company, error } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('user_id', currentUserId)
+            .single();
+
+          if (company) {
+            setCompanyName(company.name || 'Kiosqly RFPOS');
+            setWcStoreUrl(company.wc_store_url || company.domain || '');
+            setWcConnected(!!company.wc_connected);
+          }
+        }
+      } catch (err: any) {
+        console.error('Error cargando datos del usuario:', err.message);
+      } finally {
+        setLoading(false);
       }
     }
-  }, [activeTab, devices.length, userRole]);
 
-  function renderPayPalButtons() {
-    const container = document.getElementById('paypal-button-container-P-5XX972822Y4491137NKJSEEY');
-    const paypal = (window as any).paypal;
-    if (container && paypal) {
-      container.innerHTML = '';
-      paypal.Buttons({
-        style: { shape: 'rect', color: 'gold', layout: 'vertical', label: 'subscribe' },
-        createSubscription: function(data: any, actions: any) {
-          return actions.subscription.create({
-            plan_id: 'P-5XX972822Y4491137NKJSEEY',
-            quantity: devices.length > 0 ? devices.length : 1
-          });
-        },
-        onApprove: async function(data: any, actions: any) {
-          alert('¡Suscripción procesada con éxito! ID: ' + data.subscriptionID);
-        }
-      }).render('#paypal-button-container-P-5XX972822Y4491137NKJSEEY');
-    }
-  }
-
-  async function fetchCompanyData(uid: string) {
-    const { data } = await supabase.from('companies').select('*').eq('user_id', uid).single();
-    if (data) {
-      setCompanyName(data.company_name || '');
-      setRucNit(data.ruc_nit || '');
-      setAddress(data.address || '');
-      setCity(data.city || '');
-      setContactPhone(data.contact_phone || '');
-      setWebsite(data.website || '');
-      if (data.wc_store_url) setWcStoreUrl(data.wc_store_url);
-      if (data.wc_connected) setWcConnected(data.wc_connected);
-    } else {
-      await supabase.from('companies').insert([{ 
-        user_id: uid, 
-        company_name: 'Mi Restaurante S.A.', 
-        ruc_nit: '1234567-1-123456', 
-        address: 'Calle Principal', 
-        city: 'Panamá', 
-        contact_phone: '+507 6000-0000',
-        website: 'https://mitienda.com',
-        wc_connected: false
-      }]);
-      setCompanyName('Mi Restaurante S.A.');
-    }
-  }
-
-  async function fetchDevices(uid: string) {
-    const { data } = await supabase.from('kiosks').select('*').eq('user_id', uid);
-    if (data) setDevices(data);
-  }
-
-  async function fetchSubUsers(uid: string) {
-    const { data } = await supabase.from('sub_users').select('*').eq('user_id', uid);
-    if (data) setSubUsers(data);
-  }
-
-  async function fetchTickets(uid: string) {
-    const { data } = await supabase.from('tickets').select('*').eq('user_id', uid).order('created_at', { ascending: false });
-    if (data) setTickets(data);
-  }
-
-  const handleSaveCompany = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
-    setErrorMessage('');
-    const { error } = await supabase
-      .from('companies')
-      .update({ company_name: companyName, ruc_nit: rucNit, address, city, contact_phone: contactPhone, website, updated_at: new Date() })
-      .eq('user_id', userId);
-
-    if (error) setErrorMessage('Error al guardar: ' + error.message);
-    else {
-      setSavedMessage('¡Información actualizada con éxito!');
-      setTimeout(() => setSavedMessage(''), 4000);
-    }
-  };
+    loadUserData();
+  }, [searchParams]);
 
   const handleWcOAuthConnect = (e: FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
     if (!wcStoreUrl.trim()) {
       setErrorMessage('Por favor ingresa la URL de tu tienda WooCommerce.');
       return;
@@ -252,551 +79,158 @@ function DashboardContent() {
       cleanUrl = 'https://' + cleanUrl;
     }
 
+    // URL a la que WooCommerce redirige al usuario tras aprobar la autorización
+    const returnUrl = encodeURIComponent(`${window.location.origin}/rfpos/dashboard?tab=woo&success=true`);
+    
+    // URL del servidor (API endpoint) que recibe las credenciales de la API de WooCommerce por POST
     const callbackUrl = encodeURIComponent(`${window.location.origin}/api/woocommerce/callback/${userId}`);
-    const authUrl = `${cleanUrl}/wc-auth/v1/authorize?app_name=Kiosqly%20RFPOS&scope=read_write&user_id=${userId}&return_url=${encodeURIComponent(callbackUrl)}`;
+
+    const authUrl = `${cleanUrl}/wc-auth/v1/authorize?app_name=Kiosqly%20RFPOS&scope=read_write&user_id=${userId}&return_url=${returnUrl}&callback_url=${callbackUrl}`;
     window.location.href = authUrl;
-  };
-
-  const handleSaveWcManualKeys = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!userId || !wcConsumerKey || !wcConsumerSecret) {
-      setErrorMessage('Ingresa Consumer Key y Consumer Secret válidos.');
-      return;
-    }
-    setErrorMessage('');
-    const { error } = await supabase
-      .from('companies')
-      .update({ 
-        wc_store_url: wcStoreUrl, 
-        consumer_key: wcConsumerKey, 
-        consumer_secret: wcConsumerSecret, 
-        wc_connected: true,
-        updated_at: new Date() 
-      })
-      .eq('user_id', userId);
-
-    if (error) {
-      setErrorMessage('Error al guardar claves WooCommerce: ' + error.message);
-    } else {
-      setWcConnected(true);
-      setWcSuccessMsg('¡Credenciales API REST de WooCommerce guardadas y conectadas con éxito!');
-      setTimeout(() => setWcSuccessMsg(''), 5000);
-    }
-  };
-
-  const handleAddDevice = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!deviceName.trim() || !userId) return;
-    setErrorMessage('');
-
-    const { data, error } = await supabase
-      .from('kiosks')
-      .insert([{ 
-        user_id: userId, 
-        name: deviceName, 
-        model: deviceModel, 
-        serial_number: deviceSerial || `SN-ORG-${Math.floor(Math.random() * 89999 + 10000)}`,
-        installation_date: deviceInstallDate,
-        status: 'En línea', 
-        ip: deviceIp || '192.168.1.50',
-        branch_name: branchName || 'Principal',
-        battery_level: 100,
-        wifi_signal: 'Excelente',
-        charging_status: 'Conectado',
-        last_seen: new Date().toISOString()
-      }])
-      .select();
-
-    if (error) setErrorMessage('Error al agregar equipo: ' + error.message);
-    else if (data) {
-      setDevices([...devices, data[0]]);
-      setDeviceName('');
-      setDeviceSerial('');
-    }
-  };
-
-  const handleCreateSubUser = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!newSubEmail.trim() || !userId) return;
-    setErrorMessage('');
-
-    const { data, error } = await supabase
-      .from('sub_users')
-      .insert([{ user_id: userId, email: newSubEmail, role: newSubRole }])
-      .select();
-
-    if (error) setErrorMessage('Error al crear subusuario: ' + error.message);
-    else if (data) {
-      setSubUsers([...subUsers, data[0]]);
-      const inviteUrl = `${window.location.origin}/rfpos`;
-      setInviteLinkCopied(`Invitación creada para ${newSubEmail}. Enlace de acceso: ${inviteUrl}`);
-      setNewSubEmail('');
-    }
-  };
-
-  const handleCreateTicket = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!userId || !ticketSubject.trim() || !ticketMessage.trim()) return;
-    setErrorMessage('');
-
-    const { data, error } = await supabase
-      .from('tickets')
-      .insert([{ user_id: userId, subject: ticketSubject, message: ticketMessage, status: 'Abierto' }])
-      .select();
-
-    if (error) {
-      setErrorMessage('Error al crear ticket: ' + error.message);
-      return;
-    }
-
-    try {
-      await fetch('https://formsubmit.co/ajax/info@kiosqly.com', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          _subject: `Nuevo Ticket RFPOS: ${ticketSubject}`,
-          Usuario: userEmail,
-          Empresa: companyName,
-          Mensaje: ticketMessage,
-          Fecha: new Date().toLocaleString()
-        })
-      });
-    } catch (err) {
-      console.error('Error enviando notificación al correo de soporte', err);
-    }
-
-    if (data) {
-      setTickets([data[0], ...tickets]);
-      setTicketSubject('');
-      setTicketMessage('');
-      setTicketSuccess(true);
-      setTimeout(() => setTicketSuccess(false), 4000);
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/rfpos');
-  };
-
-  const calculateDaysRemaining = (installDate: string) => {
-    const install = new Date(installDate);
-    const nextBilling = new Date(install);
-    nextBilling.setDate(nextBilling.getDate() + 30);
-    const today = new Date();
-    const diffTime = nextBilling.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
-  };
-
-  const isKioskoOnline = (lastSeenString?: string) => {
-    if (!lastSeenString) return false;
-    const lastSeenDate = new Date(lastSeenString);
-    const now = new Date();
-    const diffMinutes = (now.getTime() - lastSeenDate.getTime()) / (1000 * 60);
-    return diffMinutes <= 10;
   };
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-sm text-gray-500 font-medium">Cargando portal Kiosqly RFPOS...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      <aside className="w-full md:w-64 bg-white border-r border-gray-200 p-6 flex flex-col justify-between">
-        <div>
-          <div className="flex items-center space-x-3 mb-8">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black text-white font-bold text-lg">K</div>
-            <div>
-              <h1 className="font-bold text-gray-900 text-base">Kiosqly RFPOS</h1>
-              <p className="text-xs text-gray-500">Portal de Clientes</p>
-            </div>
-          </div>
-
-          <nav className="space-y-1">
-            {(userRole === 'Administrador' ? [
-              { id: 'overview', label: '📊 Perfil & Empresa' },
-              { id: 'devices', label: '🖥️ RFPOS Terminal Fleet & Telemetry' },
-              { id: 'woo', label: '🛍️ WooCommerce' },
-              { id: 'billing', label: '💳 Facturación PayPal' },
-              { id: 'users', label: '👥 Subusuarios & Roles' },
-              { id: 'tickets', label: '🎫 Soporte & Tickets' },
-              { id: 'whatsapp', label: '💬 Asistencia WhatsApp' },
-            ] : [
-              { id: 'woo', label: '🛍️ WooCommerce' },
-              { id: 'tickets', label: '🎫 Soporte & Tickets' },
-              { id: 'whatsapp', label: '💬 Asistencia WhatsApp' },
-            ]).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition ${
-                  activeTab === tab.id ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+    <div className="min-h-screen bg-gray-950 text-gray-100 flex">
+      {/* Sidebar de Kiosqly */}
+      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+        <div className="p-6 border-b border-gray-800">
+          <h1 className="text-xl font-extrabold tracking-wider text-indigo-400">KIOSQLY</h1>
+          <p className="text-xs text-gray-400 mt-1">RFPOS & Self-Service</p>
         </div>
-
-        <div className="pt-6 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-800 truncate">{userEmail}</p>
-          <p className="text-xs text-green-600 mb-3">Rol: {userRole}</p>
+        <nav className="flex-1 p-4 space-y-2">
           <button
-            onClick={handleLogout}
-            className="w-full rounded-xl border border-gray-200 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+            onClick={() => { setActiveTab('overview'); router.push('/rfpos/dashboard?tab=overview'); }}
+            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'overview' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+            }`}
           >
-            Cerrar sesión
+            📊 Resumen General
           </button>
+          <button
+            onClick={() => { setActiveTab('woo'); router.push('/rfpos/dashboard?tab=woo'); }}
+            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'woo' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+            }`}
+          >
+            🔌 Integración WooCommerce
+          </button>
+          <button
+            onClick={() => { setActiveTab('kiosks'); router.push('/rfpos/dashboard?tab=kiosks'); }}
+            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'kiosks' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+            }`}
+          >
+            🖥️ Kioscos y Menús
+          </button>
+        </nav>
+        <div className="p-4 border-t border-gray-800 text-xs text-gray-500 truncate">
+          UID: {userId || 'No autenticado'}
         </div>
       </aside>
 
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <div className="max-w-4xl mx-auto space-y-6">
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <header className="h-16 border-b border-gray-800 bg-gray-900/40 backdrop-blur flex items-center justify-between px-8">
+          <h2 className="text-lg font-semibold capitalize">
+            {activeTab === 'overview' && 'Panel de Control Principal'}
+            {activeTab === 'woo' && 'Conexión y Sincronización WooCommerce'}
+            {activeTab === 'kiosks' && 'Administración de Kioscos'}
+          </h2>
+          <div className="text-sm font-medium text-indigo-300">{companyName}</div>
+        </header>
 
+        <div className="p-8 max-w-5xl w-full mx-auto">
           {errorMessage && (
-            <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl">
+            <div className="mb-6 p-4 bg-red-950/80 border border-red-700 text-red-200 rounded-lg text-sm">
               {errorMessage}
             </div>
           )}
-
-          {activeTab === 'overview' && userRole === 'Administrador' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Perfil de Empresa y Datos Fiscales</h2>
-              {savedMessage && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">{savedMessage}</div>}
-              
-              <form onSubmit={handleSaveCompany} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Nombre Comercial / Empresa</label>
-                    <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">RUC / NIT</label>
-                    <input type="text" value={rucNit} onChange={(e) => setRucNit(e.target.value)} placeholder="Ej. 1555555-1-2023" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Dirección Física</label>
-                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ej. Vía Argentina" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Ciudad / Provincia</label>
-                    <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ej. Panamá" className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Teléfono de Contacto</label>
-                    <input type="text" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Sitio Web / Tienda Online</label>
-                    <input type="text" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                </div>
-                <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Actualizar Perfil de Empresa</button>
-              </form>
+          {successMessage && (
+            <div className="mb-6 p-4 bg-emerald-950/80 border border-emerald-700 text-emerald-200 rounded-lg text-sm">
+              {successMessage}
             </div>
           )}
 
-          {activeTab === 'devices' && userRole === 'Administrador' && (
+          {activeTab === 'overview' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">RFPOS Terminal Fleet & Telemetry</h2>
-                <span className="px-3 py-1 bg-black text-white text-xs font-bold rounded-xl">
-                  Total Terminals: {devices.length}
-                </span>
-              </div>
-
-              <form onSubmit={handleAddDevice} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Dar de Alta Nueva Estación / Terminal RFPOS</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Nombre / Ubicación</label>
-                    <input type="text" required placeholder="Ej. Kiosco Caja Principal" value={deviceName} onChange={(e) => setDeviceName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Modelo de Estación</label>
-                    <select value={deviceModel} onChange={(e) => setDeviceModel(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
-                      <option value="RFPOS ORG001">RFPOS ORG001</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Sucursal</label>
-                    <input type="text" placeholder="Ej. Vía España" value={branchName} onChange={(e) => setBranchName(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Serial / ID del Dispositivo</label>
-                    <input type="text" placeholder="Ej. SN-ORG-001" value={deviceSerial} onChange={(e) => setDeviceSerial(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Fecha de Alta</label>
-                    <input type="date" required value={deviceInstallDate} onChange={(e) => setDeviceInstallDate(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div className="flex items-end">
-                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Registrar Estación</button>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-lg">
+                  <h3 className="text-sm font-medium text-gray-400">Estado de Sincronización</h3>
+                  <p className="text-xl font-bold mt-2 text-indigo-400">
+                    {wcConnected ? 'WooCommerce Conectado' : 'Pendiente de Conexión'}
+                  </p>
                 </div>
-              </form>
-
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Estado de Salud y Ciclo de Facturación</h3>
-                <div className="divide-y divide-gray-100">
-                  {devices.map((device) => {
-                    const daysLeft = calculateDaysRemaining(device.installation_date || device.created_at || new Date().toISOString());
-                    const online = isKioskoOnline(device.last_seen);
-                    const battery = device.battery_level !== undefined ? device.battery_level : 100;
-                    const charging = device.charging_status || 'Conectado';
-                    const wifi = device.wifi_signal || 'Excelente';
-                    const lowBattery = battery < 20 && charging !== 'Conectado';
-
-                    return (
-                      <div key={device.id} className="py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 text-sm">
-                        <div className="space-y-1">
-                          <p className="font-bold text-gray-900 text-base">
-                            {device.name} <span className="text-xs font-normal text-gray-500">({device.model || 'RFPOS ORG001'})</span>
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Sucursal: <span className="font-semibold text-gray-700">{device.branch_name || 'Principal'}</span> | Serial: <span className="font-mono text-gray-700">{device.serial_number || 'N/A'}</span>
-                          </p>
-                          <div className="flex items-center space-x-4 text-xs pt-1 text-gray-600">
-                            <span>🔋 Batería: <strong>{battery}%</strong> ({charging})</span>
-                            <span>📶 WiFi: <strong>{wifi}</strong></span>
-                            <span>⏱️ Pago en: <strong className="text-amber-700">{daysLeft} días</strong></span>
-                          </div>
-                        </div>
-                        <div>
-                          <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${
-                            lowBattery ? 'bg-red-100 text-red-700 animate-pulse' : online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {lowBattery ? '⚠️ Batería Baja / Descargando' : online ? '🟢 En Línea' : '🔴 Desconectado'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {devices.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay estaciones RFPOS registradas todavía.</p>}
+                <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-lg">
+                  <h3 className="text-sm font-medium text-gray-400">Kioscos Activos</h3>
+                  <p className="text-xl font-bold mt-2 text-emerald-400">0 Operativos</p>
+                </div>
+                <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl shadow-lg">
+                  <h3 className="text-sm font-medium text-gray-400">Ventas Totales Hoy</h3>
+                  <p className="text-xl font-bold mt-2 text-blue-400">$0.00</p>
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'woo' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Sincronización WooCommerce Real (OAuth & API)</h2>
-                <span className={`text-xs font-bold px-3 py-1 rounded-full ${wcConnected ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-800'}`}>
-                  {wcConnected ? '🟢 Tienda Conectada' : '🟡 Pendiente de Conexión'}
-                </span>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg space-y-6">
+              <div>
+                <h3 className="text-lg font-medium text-white">Autorización REST API de WooCommerce</h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  Ingresa la dirección web de tu tienda para autorizar el acceso seguro de lectura y escritura para el punto de venta Kiosqly RFPOS.
+                </p>
               </div>
 
-              {wcSuccessMsg && (
-                <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">
-                  {wcSuccessMsg}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-100 text-purple-700 text-xl font-bold">W</div>
-                    <h3 className="font-bold text-gray-900 text-lg">1. Conexión Rápida WooCommerce OAuth</h3>
-                    <p className="text-xs text-gray-500">Ingresa la URL pública de tu tienda WordPress con WooCommerce para autorizar la conexión automática de catálogos y órdenes.</p>
-                  </div>
-
-                  <form onSubmit={handleWcOAuthConnect} className="space-y-4 pt-2">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 uppercase">URL de tu Tienda</label>
-                      <input 
-                        type="text" 
-                        required 
-                        placeholder="https://mirestaurante.com" 
-                        value={wcStoreUrl} 
-                        onChange={(e) => setWcStoreUrl(e.target.value)} 
-                        className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-black focus:outline-none" 
-                      />
-                    </div>
-                    <button 
-                      type="submit" 
-                      className="w-full rounded-2xl bg-[#96588a] text-white font-bold py-3 text-sm hover:bg-[#7b4671] shadow-md transition"
-                    >
-                      Conectar vía WooCommerce Auth ↗
-                    </button>
-                  </form>
-                </div>
-
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-800 text-xl font-bold">🔑</div>
-                    <h3 className="font-bold text-gray-900 text-lg">2. Conexión Manual (Consumer Keys)</h3>
-                    <p className="text-xs text-gray-500">Genera tus claves en <em>WooCommerce &gt; Ajustes &gt; Avanzado &gt; API REST</em> (Permisos: Lectura/Escritura) e ingrésalas aquí.</p>
-                  </div>
-
-                  <form onSubmit={handleSaveWcManualKeys} className="space-y-3">
-                    <div>
-                      <input 
-                        type="text" 
-                        required 
-                        placeholder="Consumer Key (ck_...)" 
-                        value={wcConsumerKey} 
-                        onChange={(e) => setWcConsumerKey(e.target.value)} 
-                        className="w-full rounded-xl border border-gray-300 px-4 py-2 text-xs font-mono focus:border-black focus:outline-none" 
-                      />
-                    </div>
-                    <div>
-                      <input 
-                        type="password" 
-                        required 
-                        placeholder="Consumer Secret (cs_...)" 
-                        value={wcConsumerSecret} 
-                        onChange={(e) => setWcConsumerSecret(e.target.value)} 
-                        className="w-full rounded-xl border border-gray-300 px-4 py-2 text-xs font-mono focus:border-black focus:outline-none" 
-                      />
-                    </div>
-                    <button 
-                      type="submit" 
-                      className="w-full rounded-2xl bg-black text-white font-bold py-3 text-sm hover:bg-gray-800 transition"
-                    >
-                      Guardar y Validar Credenciales
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'billing' && userRole === 'Administrador' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Facturación & Suscripción PayPal</h2>
-              <div className="bg-gradient-to-br from-white to-amber-50/30 p-8 rounded-3xl shadow-sm border border-amber-100 space-y-6">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-6 gap-4">
-                  <div>
-                    <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">Suscripción Automatizada</span>
-                    <h3 className="font-extrabold text-gray-900 text-xl mt-2">Plan Kiosqly RFPOS por Equipos</h3>
-                    <p className="text-xs text-gray-500 mt-1">Facturación mensual automática por cada terminal RFPOS activa en tu flota.</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-black text-gray-900">$29.00 <span className="text-xs font-normal text-gray-500">/ mes por equipo</span></p>
-                    <p className="text-xs text-gray-500 mt-1">Terminales activas: {devices.length}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <p className="text-xs text-gray-600">
-                    Tu suscripción se calcula multiplicando $29.00 USD por cada terminal RFPOS registrada en tu flota. Puedes suscribirte o actualizar tu plan directamente con PayPal de forma automatizada:
+              <form onSubmit={handleWcOAuthConnect} className="space-y-4 max-w-xl">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    URL de la Tienda WooCommerce
+                  </label>
+                  <input
+                    type="text"
+                    value={wcStoreUrl}
+                    onChange={(e) => setWcStoreUrl(e.target.value)}
+                    placeholder="https://tudominio.com"
+                    className="w-full bg-gray-950 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Asegúrate de incluir `https://` y que tu tienda permita solicitudes de API externas.
                   </p>
-                  <div id="paypal-button-container-P-5XX972822Y4491137NKJSEEY" className="max-w-md"></div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {activeTab === 'users' && userRole === 'Administrador' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Subusuarios y Control de Roles</h2>
-              
-              <form onSubmit={handleCreateSubUser} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Invitar Nuevo Colaborador</h3>
-                {inviteLinkCopied && <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-xl">{inviteLinkCopied}</div>}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Correo Electrónico</label>
-                    <input type="email" required placeholder="colaborador@restaurante.com" value={newSubEmail} onChange={(e) => setNewSubEmail(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-gray-500 uppercase">Rol Asignado</label>
-                    <select value={newSubRole} onChange={(e) => setNewSubRole(e.target.value as any)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
-                      <option value="Colaborador">Colaborador (Acceso WooCommerce y Soporte)</option>
-                      <option value="Administrador">Administrador (Acceso Total)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-end">
-                    <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Crear Acceso</button>
-                  </div>
-                </div>
-              </form>
-
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Listado de Subusuarios</h3>
-                <div className="divide-y divide-gray-100">
-                  {subUsers.map((sub) => (
-                    <div key={sub.id} className="py-3 flex justify-between items-center text-sm">
-                      <div>
-                        <p className="font-bold text-gray-900">{sub.email}</p>
-                        <p className="text-xs text-gray-500">Rol: {sub.role}</p>
-                      </div>
-                      <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full">{sub.role}</span>
-                    </div>
-                  ))}
-                  {subUsers.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay subusuarios adicionales registrados.</p>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'tickets' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Soporte Técnico y Tickets</h2>
-              {ticketSuccess && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">¡Ticket enviado con éxito a info@kiosqly.com! Nos pondremos en contacto pronto.</div>}
-              
-              <form onSubmit={handleCreateTicket} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Abrir Nuevo Ticket de Soporte</h3>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Asunto</label>
-                  <input type="text" required placeholder="Ej. Consulta sobre impresora térmica o sincronización" value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Mensaje / Detalle</label>
-                  <textarea required rows={4} placeholder="Describa su solicitud..." value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
-                </div>
-                <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white text-sm font-medium hover:bg-gray-800 transition">Enviar Ticket a Soporte</button>
-              </form>
-
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Historial de Tickets</h3>
-                <div className="divide-y divide-gray-100">
-                  {tickets.map((ticket) => (
-                    <div key={ticket.id} className="py-4 space-y-1 text-sm">
-                      <div className="flex justify-between items-center">
-                        <p className="font-bold text-gray-900">{ticket.subject}</p>
-                        <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full">{ticket.status}</span>
-                      </div>
-                      <p className="text-xs text-gray-600">{ticket.message}</p>
-                      <p className="text-[10px] text-gray-400">{new Date(ticket.created_at).toLocaleString()}</p>
-                    </div>
-                  ))}
-                  {tickets.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay tickets registrados.</p>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'whatsapp' && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Asistencia Directa por WhatsApp</h2>
-              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 text-center space-y-6">
-                <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-green-100 text-green-600 text-3xl font-bold mx-auto">💬</div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-gray-900">¿Necesitas asistencia inmediata con tus terminales RFPOS?</h3>
-                  <p className="text-xs text-gray-500 max-w-md mx-auto">Nuestro equipo de soporte técnico en Panamá está disponible para ayudarte con configuraciones de hardware, WooCommerce y redes.</p>
-                </div>
-                <div>
-                  <a 
-                    href="https://wa.me/50760000000?text=Hola%20Kiosqly,%20necesito%20asistencia%20con%20mi%20portal%20RFPOS" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-block rounded-2xl bg-green-600 text-white font-bold px-8 py-3.5 text-sm hover:bg-green-700 shadow-md transition"
+                <div className="flex items-center space-x-4 pt-2">
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-sm transition-colors shadow"
                   >
-                    Abrir Chat de WhatsApp ↗
-                  </a>
+                    {wcConnected ? 'Reconectar WooCommerce' : 'Conectar con WooCommerce'}
+                  </button>
+                  {wcConnected && (
+                    <span className="inline-flex items-center text-emerald-400 text-sm font-medium">
+                      ● Tienda Vinculada
+                    </span>
+                  )}
                 </div>
-              </div>
+              </form>
             </div>
           )}
 
+          {activeTab === 'kiosks' && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg">
+              <h3 className="text-lg font-medium text-white">Configuración de Kioscos Self-Service</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Administra tus terminales táctiles, impresoras de recibos y pasarelas de pago locales en Panamá.
+              </p>
+            </div>
+          )}
         </div>
       </main>
     </div>
