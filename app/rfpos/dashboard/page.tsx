@@ -683,17 +683,17 @@ function DashboardContent() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-100 pb-6 gap-4">
                   <div>
                     <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider">Suscripción Automatizada</span>
-                    <h3 className="font-extrabold text-gray-900 text-xl mt-2">Plan Kiosqly RFPOS por Equipos</h3>
-                    <p className="text-xs text-gray-500 mt-1">El cobro mensual se ajusta dinámicamente según la cantidad de estaciones activas registradas.</p>
+                    <h3 className="font-extrabold text-gray-900 text-xl mt-2">Plan Kiosqly RFPOS por Equipo</h3>
+                    <p className="text-xs text-gray-500 mt-1">El cobro se ajusta automáticamente según la cantidad de terminales RFPOS activas en tu flota.</p>
                   </div>
                   <div className="text-right">
                     <span className="text-2xl font-black text-gray-900">$29.00</span>
-                    <p className="text-xs text-gray-500">/ mes por terminal</p>
+                    <span className="text-xs text-gray-500 block">USD / mes por equipo</span>
                   </div>
                 </div>
                 <div className="space-y-4">
-                  <p className="text-xs text-gray-600 font-medium">Estaciones activas en tu cuenta: <strong>{devices.length}</strong></p>
-                  <div id="paypal-button-container-P-5XX972822Y4491137NKJSEEY" className="w-full max-w-md"></div>
+                  <p className="text-xs font-semibold text-gray-700 uppercase">Selecciona tu método de pago seguro:</p>
+                  <div id="paypal-button-container-P-5XX972822Y4491137NKJSEEY" className="max-w-md"></div>
                 </div>
               </div>
             </div>
@@ -701,7 +701,7 @@ function DashboardContent() {
 
           {activeTab === 'users' && userRole === 'Administrador' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Subusuarios & Roles</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Gestión de Subusuarios y Roles</h2>
               <form onSubmit={handleCreateSubUser} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
                 <h3 className="font-bold text-gray-900 text-md">Invitar Colaborador o Administrador</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -711,7 +711,7 @@ function DashboardContent() {
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-500 uppercase">Rol Asignado</label>
-                    <select value={newSubRole} onChange={(e) => setNewSubRole(e.target.value as any)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
+                    <select value={newSubRole} onChange={(e) => setNewSubRole(e.target.value as 'Administrador' | 'Colaborador')} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm bg-white focus:border-black focus:outline-none">
                       <option value="Colaborador">Colaborador</option>
                       <option value="Administrador">Administrador</option>
                     </select>
@@ -720,19 +720,21 @@ function DashboardContent() {
                     <button type="submit" className="w-full rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Generar Invitación</button>
                   </div>
                 </div>
-                {inviteLinkCopied && <p className="text-xs text-green-700 bg-green-50 p-3 rounded-xl border border-green-200 mt-2">{inviteLinkCopied}</p>}
+                {inviteLinkCopied && <p className="text-xs text-green-600 font-medium pt-2">{inviteLinkCopied}</p>}
               </form>
 
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg">Colaboradores Registrados</h3>
+                <h3 className="font-bold text-gray-900 text-lg">Subusuarios Activos</h3>
                 <div className="divide-y divide-gray-100">
                   {subUsers.map((sub) => (
                     <div key={sub.id} className="py-3 flex justify-between items-center text-sm">
-                      <span className="font-medium text-gray-800">{sub.email}</span>
-                      <span className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full">{sub.role}</span>
+                      <div>
+                        <p className="font-bold text-gray-900">{sub.email}</p>
+                        <p className="text-xs text-gray-500">Rol: <span className="font-semibold">{sub.role}</span></p>
+                      </div>
                     </div>
                   ))}
-                  {subUsers.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay subusuarios registrados todavía.</p>}
+                  {subUsers.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay subusuarios registrados.</p>}
                 </div>
               </div>
             </div>
@@ -740,18 +742,18 @@ function DashboardContent() {
 
           {activeTab === 'tickets' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Soporte & Tickets</h2>
-              {ticketSuccess && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">¡Ticket enviado con éxito a nuestro equipo de soporte (info@kiosqly.com)!</div>}
+              <h2 className="text-2xl font-bold text-gray-900">Soporte Técnico y Tickets</h2>
+              {ticketSuccess && <div className="p-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-xl">¡Ticket creado y enviado a soporte exitosamente!</div>}
               
               <form onSubmit={handleCreateTicket} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h3 className="font-bold text-gray-900 text-md">Crear Nuevo Ticket de Soporte</h3>
+                <h3 className="font-bold text-gray-900 text-md">Abrir Nuevo Ticket de Soporte</h3>
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Asunto</label>
-                  <input type="text" required placeholder="Ej. Problema con sincronización de impresora" value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
+                  <input type="text" required placeholder="Ej. Problema con sincronización de inventario" value={ticketSubject} onChange={(e) => setTicketSubject(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Descripción del Problema</label>
-                  <textarea required rows={4} placeholder="Describe detalladamente tu solicitud..." value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-black focus:outline-none"></textarea>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Mensaje / Detalle</label>
+                  <textarea required rows={4} placeholder="Describe el inconveniente en detalle..." value={ticketMessage} onChange={(e) => setTicketMessage(e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 p-4 text-sm focus:border-black focus:outline-none" />
                 </div>
                 <button type="submit" className="rounded-xl bg-black px-6 py-2.5 text-white font-medium text-sm hover:bg-gray-800 transition">Enviar Ticket</button>
               </form>
@@ -760,16 +762,16 @@ function DashboardContent() {
                 <h3 className="font-bold text-gray-900 text-lg">Historial de Tickets</h3>
                 <div className="divide-y divide-gray-100">
                   {tickets.map((t) => (
-                    <div key={t.id} className="py-4 space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="font-bold text-gray-900">{t.subject}</span>
-                        <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full">{t.status}</span>
+                    <div key={t.id} className="py-4 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <p className="font-bold text-gray-900 text-sm">{t.subject}</p>
+                        <span className="px-2.5 py-1 bg-amber-50 text-amber-800 text-xs font-semibold rounded-full">{t.status}</span>
                       </div>
                       <p className="text-xs text-gray-600">{t.message}</p>
                       <p className="text-[10px] text-gray-400">{new Date(t.created_at).toLocaleString()}</p>
                     </div>
                   ))}
-                  {tickets.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay tickets registrados.</p>}
+                  {tickets.length === 0 && <p className="text-xs text-gray-500 text-center py-4">No hay tickets abiertos.</p>}
                 </div>
               </div>
             </div>
@@ -779,17 +781,19 @@ function DashboardContent() {
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900">Asistencia por WhatsApp</h2>
               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 text-center space-y-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 text-green-600 text-3xl mx-auto font-bold">💬</div>
-                <h3 className="font-bold text-gray-900 text-xl">¿Necesitas ayuda inmediata con tu Kiosco o RFPOS?</h3>
-                <p className="text-xs text-gray-500 max-w-md mx-auto">Nuestro equipo técnico en Kiosqly está disponible para atenderte de forma directa a través de nuestro canal oficial de WhatsApp.</p>
-                <a
-                  href="https://wa.me/50760000000?text=Hola%20Kiosqly,%20necesito%20asistencia%20con%20mi%20sistema%20RFPOS"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block rounded-2xl bg-green-600 text-white font-bold px-8 py-3 text-sm hover:bg-green-700 transition shadow-md"
-                >
-                  Abrir Chat de WhatsApp ↗
-                </a>
+                <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-green-100 text-green-700 text-3xl font-bold">💬</div>
+                <h3 className="font-bold text-gray-900 text-xl">¿Necesitas asistencia técnica inmediata?</h3>
+                <p className="text-sm text-gray-500 max-w-md mx-auto">Nuestro equipo de soporte técnico en Kiosqly RFPOS está disponible para atenderte directamente vía WhatsApp.</p>
+                <div>
+                  <a
+                    href="https://wa.me/50760000000?text=Hola,%20necesito%20soporte%20con%20mi%20plataforma%20Kiosqly%20RFPOS"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block rounded-2xl bg-[#25D366] text-white font-bold px-8 py-3 text-sm hover:bg-[#20ba5a] shadow-md transition"
+                  >
+                    Abrir Chat de WhatsApp ↗
+                  </a>
+                </div>
               </div>
             </div>
           )}
