@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+// Usamos Service Role Key para asegurar que tenga permisos de escritura en la base de datos
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -10,21 +11,39 @@ export async function POST(
   { params }: { params: Promise<{ userId: string }> | { userId: string } }
 ) {
   try {
-    // Compatible con Next.js 14 y 15+ (donde params puede ser una promesa)
     const resolvedParams = await Promise.resolve(params);
     const userId = resolvedParams.userId;
 
-    const body = await request.json();
+    let body: any = {};
+    const contentType = request.headers.get('content-type') || '';
+
+    // WooCommerce puede enviar los datos como JSON o como URL-encoded form data
+    if (contentType.includes('application/json')) {
+      body = await request.json();
+    } else if (contentType.includes('application/x-www-form-urlencoded')) {
+      const text = await request.text();
+      const formData = new URLSearchParams(text);
+      body = Object.fromEntries(formData.entries());
+    } else {
+      try {
+        body = await request.json();
+      } catch {
+        const text = await request.text();
+        const formData = new URLSearchParams(text);
+        body = Object.fromEntries(formData.entries());
+      }
+    }
+
     const { consumer_key, consumer_secret } = body;
 
     if (!consumer_key || !consumer_secret) {
       return NextResponse.json(
-        { success: false, error: 'No se recibieron las credenciales (Consumer Key / Secret)' },
+        { success: false, error: 'No se recibieron las credenciales de WooCommerce (Consumer Key / Secret)' },
         { status: 400 }
       );
     }
 
-    // Guardar las credenciales en la tabla companies asociadas al user_id
+    // Guardar o actualizar las credenciales en la tabla companies asociadas al user_id
     const { error } = await supabase
       .from('companies')
       .update({
